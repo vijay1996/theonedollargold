@@ -1,0 +1,6 @@
+{
+  "name": "One Dollar Gold Dashboard",
+  "description": "Personal finance dashboard application",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

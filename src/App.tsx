@@ -1,0 +1,64 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router';
+import { onAuthStateChanged } from 'firebase/auth';
+import { auth } from './lib/firebase';
+import { AppLayout } from './components/layout/AppLayout';
+import { Toaster } from './components/ui/sonner';
+import Login from './pages/Login';
+import Landing from './pages/Landing';
+import Dashboard from './pages/Dashboard';
+import Transactions from './pages/Transactions';
+import Categories from './pages/Categories';
+import Budgets from './pages/Budgets';
+import Subscriptions from './pages/Subscriptions';
+import CreditCards from './pages/CreditCards';
+import Profile from './pages/Profile';
+
+function ProtectedRoute({ user, loading }: { user: any; loading: boolean }) {
+  if (loading) return <div className="p-8 text-center text-muted-foreground flex h-screen items-center justify-center">Loading...</div>;
+  if (!user) return <Navigate to="/login" replace />;
+  return <Outlet />;
+}
+
+export default function App() {
+  const [user, setUser] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, async (u) => {
+      setUser(u);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  return (
+    <>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={!loading && user ? <Navigate to="/finance/dashboard" /> : <Login />} />
+          
+          <Route path="/finance" element={<ProtectedRoute user={user} loading={loading} />}>
+            <Route element={<AppLayout />}>
+              <Route index element={<Navigate to="dashboard" replace />} />
+              <Route path="dashboard" element={<Dashboard />} />
+              <Route path="transactions" element={<Transactions />} />
+              <Route path="categories" element={<Categories />} />
+              <Route path="budgets" element={<Budgets />} />
+              <Route path="subscriptions" element={<Subscriptions />} />
+              <Route path="cards" element={<CreditCards />} />
+              <Route path="profile" element={<Profile />} />
+            </Route>
+          </Route>
+        </Routes>
+      </BrowserRouter>
+      <Toaster />
+    </>
+  );
+}
