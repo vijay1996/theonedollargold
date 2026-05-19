@@ -6,7 +6,7 @@ import { Input } from './ui/input';
 import { MessageCircle, X } from 'lucide-react';
 import { ScrollArea } from './ui/scroll-area';
 import { auth, db } from '../lib/firebase';
-import { collection, onSnapshot } from 'firebase/firestore';
+import Loader from './ui/loader';
 
 export function AIChat() {
   const [open, setOpen] = useState(false);
@@ -16,20 +16,36 @@ export function AIChat() {
   const [dataContext, setDataContext] = useState<any>({});
 
   useEffect(() => {
-    if (!auth.currentUser) return;
-    const uid = auth.currentUser.uid;
-    const unsubsc = [
-      onSnapshot(collection(db, 'users', uid, 'transactions'), snap => {
-        setDataContext(prev => ({ ...prev, transactions: snap.docs.map(d => d.data()) }));
-      }),
-      onSnapshot(collection(db, 'users', uid, 'budgets'), snap => {
-        setDataContext(prev => ({ ...prev, budgets: snap.docs.map(d => d.data()) }));
-      }),
-      onSnapshot(collection(db, 'users', uid, 'subscriptions'), snap => {
-        setDataContext(prev => ({ ...prev, subscriptions: snap.docs.map(d => d.data()) }));
-      })
-    ];
-    return () => unsubsc.forEach(u => u());
+    let channel: any;
+    const init = async () => {
+      const user = auth.currentUser || await auth.getUser();
+      if (!user) return;
+      try {
+        const [{ data: tData }, { data: bData }, { data: sData }] = await Promise.all([
+          db.from('transactions').select('*').eq('uid', user.uid),
+          db.from('budgets').select('*').eq('uid', user.uid),
+          db.from('subscriptions').select('*').eq('uid', user.uid)
+        ]);
+        setDataContext({ transactions: tData || [], budgets: bData || [], subscriptions: sData || [] });
+
+        // use a unique channel topic per mount to avoid adding handlers to an already-subscribed channel
+        const chanTopic = `public:ai_data_${user.uid}_${Date.now()}`;
+        channel = db.channel(chanTopic)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `uid=eq.${user.uid}` }, () => {
+            db.from('transactions').select('*').eq('uid', user.uid).then(r => { if (!r.error) setDataContext(prev => ({ ...prev, transactions: r.data || [] })); });
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'budgets', filter: `uid=eq.${user.uid}` }, () => {
+            db.from('budgets').select('*').eq('uid', user.uid).then(r => { if (!r.error) setDataContext(prev => ({ ...prev, budgets: r.data || [] })); });
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'subscriptions', filter: `uid=eq.${user.uid}` }, () => {
+            db.from('subscriptions').select('*').eq('uid', user.uid).then(r => { if (!r.error) setDataContext(prev => ({ ...prev, subscriptions: r.data || [] })); });
+          }).subscribe();
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    init();
+    return () => { if (channel?.unsubscribe) channel.unsubscribe(); };
   }, []);
 
   const sendMessage = async (e: React.FormEvent) => {
@@ -95,7 +111,13 @@ export function AIChat() {
                 </div>
               </div>
             ))}
-            {loading && <div className="text-sm text-muted-foreground">AI is typing...</div>}
+            {loading && (
+              <div className="flex items-start py-2">
+                <div className="rounded-lg bg-slate-900 px-4 py-3">
+                  <Loader size={28} label="AI is typing" />
+                </div>
+              </div>
+            )}
           </div>
         </ScrollArea>
         <form onSubmit={sendMessage} className="mt-4 flex gap-2">

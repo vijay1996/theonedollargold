@@ -1,7 +1,6 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
 import { auth, db } from '../lib/firebase';
-import { collection, setDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -11,8 +10,11 @@ import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
 import { handleFirestoreError, OperationType } from '../lib/firestoreAuthError';
 import { Trash2, Plus } from 'lucide-react';
+import LoadingOverlay from '../components/ui/loading-overlay';
+import { useLocalization } from '../hooks/useLocalization';
 
 export default function Budgets() {
+  const { formatCurrency } = useLocalization();
   const [budgets, setBudgets] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
@@ -24,17 +26,43 @@ export default function Budgets() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!auth.currentUser) return;
-    const catRef = collection(db, 'users', auth.currentUser.uid, 'categories');
-    const unsubCat = onSnapshot(catRef, (snap) => setCategories(snap.docs.map(d => d.data())));
+    let channel: any;
+    const init = async () => {
+      setLoading(true);
+      const user = auth.currentUser || await auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const [{ data: catData }, { data: budData }, { data: transData }] = await Promise.all([
+          db.from('categories').select('*').eq('uid', user.uid),
+          db.from('budgets').select('*').eq('uid', user.uid),
+          db.from('transactions').select('*').eq('uid', user.uid)
+        ]);
+        setCategories(catData || []);
+        setBudgets(budData || []);
+        setTransactions(transData || []);
 
-    const budRef = collection(db, 'users', auth.currentUser.uid, 'budgets');
-    const unsubBud = onSnapshot(budRef, (snap) => setBudgets(snap.docs.map(d => d.data())));
-
-    const transRef = collection(db, 'users', auth.currentUser.uid, 'transactions');
-    const unsubTrans = onSnapshot(transRef, (snap) => setTransactions(snap.docs.map(d => d.data())));
-
-    return () => { unsubCat(); unsubBud(); unsubTrans(); };
+        const chanTopic = `public:budgets_${user.uid}_${Date.now()}`;
+        channel = db.channel(chanTopic)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'categories', filter: `uid=eq.${user.uid}` }, () => {
+            db.from('categories').select('*').eq('uid', user.uid).then(r => { if (!r.error) setCategories(r.data || []); });
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'budgets', filter: `uid=eq.${user.uid}` }, () => {
+            db.from('budgets').select('*').eq('uid', user.uid).then(r => { if (!r.error) setBudgets(r.data || []); });
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `uid=eq.${user.uid}` }, () => {
+            db.from('transactions').select('*').eq('uid', user.uid).then(r => { if (!r.error) setTransactions(r.data || []); });
+          }).subscribe();
+      } catch (err: any) {
+        handleFirestoreError(err, OperationType.LIST, "users/" + user?.uid + "/budgets");
+      } finally {
+        setLoading(false);
+      }
+    };
+    init();
+    return () => { if (channel?.unsubscribe) channel.unsubscribe(); };
   }, []);
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -42,16 +70,14 @@ export default function Budgets() {
     if (!categoryId || !limit || !auth.currentUser) return;
     setLoading(true);
     try {
+      const user = auth.currentUser || await auth.getUser();
       const id = uuidv4();
-      const ref = doc(db, 'users', auth.currentUser.uid, 'budgets', id);
-      await setDoc(ref, {
-        id,
-        uid: auth.currentUser.uid,
-        categoryId,
-        limit: parseFloat(limit),
-        period,
-        createdAt: new Date().getTime(),
-        updatedAt: new Date().getTime()
+      const payload = { id, uid: user.uid, category_id: categoryId, limit_amount: parseFloat(limit), period, created_at: new Date().getTime(), updated_at: new Date().getTime() };
+      const { error } = await db.from('budgets').upsert([payload], { onConflict: 'id' });
+      if (error) throw error;
+      setBudgets(prev => {
+        const list = (prev || []).filter(b => b.id !== id);
+        return [payload, ...list];
       });
       setOpen(false);
       setLimit('');
@@ -65,13 +91,16 @@ export default function Budgets() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!auth.currentUser) return;
+    setLoading(true);
     try {
-      await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'budgets', id));
+      const user = auth.currentUser || await auth.getUser();
+      await db.from('budgets').delete().eq('id', id).eq('uid', user.uid);
       toast.success('Budget deleted');
     } catch (err: any) {
       toast.error(err.message);
-      handleFirestoreError(err, OperationType.DELETE, "users/" + auth.currentUser.uid + "/budgets/" + id);
+      handleFirestoreError(err, OperationType.DELETE, "users/" + (auth.currentUser?.uid || '') + "/budgets/" + id);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -84,13 +113,14 @@ export default function Budgets() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
+      <LoadingOverlay show={loading} label="Updating budgets" />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h2 className="text-3xl font-bold tracking-tight">Budgets</h2>
           <p className="text-muted-foreground">Track your spending limits by category.</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger render={<Button />}>
+          <DialogTrigger render={<Button className="w-full sm:w-auto" />}>
             <Plus className="h-4 w-4 mr-2" /> Add Budget
           </DialogTrigger>
           <DialogContent>
@@ -133,7 +163,9 @@ export default function Budgets() {
         {budgets.map(b => {
           // calculate spent
           const spent = transactions.filter(t => {
-            if (t.categoryId !== b.categoryId || t.type !== 'expense') return false;
+            const tCategory = t.category_id || t.categoryId;
+            const bCategory = b.category_id || b.categoryId;
+            if (tCategory !== bCategory || t.type !== 'expense') return false;
             const d = new Date(t.date);
             if (b.period === 'monthly') {
               return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
@@ -142,21 +174,21 @@ export default function Budgets() {
             }
           }).reduce((acc, curr) => acc + curr.amount, 0);
 
-          const percent = Math.min(100, Math.max(0, (spent / b.limit) * 100));
+          const percent = Math.min(100, Math.max(0, (spent / (b.limit_amount || 1)) * 100));
           const isWarning = percent > 80;
           const isDanger = percent >= 100;
 
           return (
             <Card key={b.id}>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-lg font-medium">{getCategoryName(b.categoryId)}</CardTitle>
+                <CardTitle className="text-lg font-medium">{getCategoryName(b.category_id || b.categoryId)}</CardTitle>
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(b.id)}>
                   <Trash2 className="h-4 w-4 text-red-500" />
                 </Button>
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold tracking-tight mb-4">
-                  ${spent.toFixed(2)} <span className="text-sm font-normal text-muted-foreground">/ ${b.limit.toFixed(2)}</span>
+                  {formatCurrency(spent)} <span className="text-sm font-normal text-muted-foreground">/ {formatCurrency(b.limit_amount || 0)}</span>
                 </div>
                 <div className="w-full bg-slate-100 rounded-full h-2.5 mb-1 overflow-hidden">
                   <div 

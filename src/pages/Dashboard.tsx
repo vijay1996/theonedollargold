@@ -1,36 +1,72 @@
 import { useState, useEffect } from 'react';
 import { auth, db } from '../lib/firebase';
-import { collection, onSnapshot, query, limit, orderBy } from 'firebase/firestore';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, LineChart, Line } from 'recharts';
+import { /* charts removed */ } from 'recharts';
 import { format, subMonths } from 'date-fns';
 import { handleFirestoreError, OperationType } from '../lib/firestoreAuthError';
 import { exportToCSV } from '../lib/exportCSV';
-import { Download } from 'lucide-react';
+import { Download, Wallet, CreditCard as CCIcon, TrendingUp, TrendingDown } from 'lucide-react';
+import LoadingOverlay from '../components/ui/loading-overlay';
+import { useLocalization } from '../hooks/useLocalization';
 
 export default function Dashboard() {
+  const { formatCurrency, formatDate } = useLocalization();
   const [transactions, setTransactions] = useState<any[]>([]);
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
   const [creditCards, setCreditCards] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
+  const [disclosures, setDisclosures] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!auth.currentUser) return;
-    const uid = auth.currentUser.uid;
-    const catRef = collection(db, 'users', uid, 'categories');
-    const unsubCat = onSnapshot(catRef, (snap) => setCategories(snap.docs.map(d => d.data())));
+    let channel: any;
+    const init = async () => {
+      setLoading(true);
+      const user = auth.currentUser || await auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const [{ data: catData }, { data: transData }, { data: subData }, { data: ccData }, { data: discData }] = await Promise.all([
+          db.from('categories').select('*').eq('uid', user.uid),
+          db.from('transactions').select('*').eq('uid', user.uid),
+          db.from('subscriptions').select('*').eq('uid', user.uid),
+          db.from('credit_cards').select('*').eq('uid', user.uid),
+          db.from('disclosures').select('*').eq('uid', user.uid)
+        ]);
+        setCategories(catData || []);
+        setTransactions((transData || []).sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        setSubscriptions(subData || []);
+        setCreditCards(ccData || []);
+        setDisclosures(discData || []);
 
-    const transRef = collection(db, 'users', uid, 'transactions');
-    const unsubTrans = onSnapshot(transRef, (snap) => setTransactions(snap.docs.map(d => d.data()).sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())));
-
-    const subRef = collection(db, 'users', uid, 'subscriptions');
-    const unsubSub = onSnapshot(subRef, (snap) => setSubscriptions(snap.docs.map(d => d.data())));
-
-    const ccRef = collection(db, 'users', uid, 'creditCards');
-    const unsubCC = onSnapshot(ccRef, (snap) => setCreditCards(snap.docs.map(d => d.data())));
-
-    return () => { unsubCat(); unsubTrans(); unsubSub(); unsubCC(); };
+        const chanTopic = `public:dashboard_${user.uid}_${Date.now()}`;
+        channel = db.channel(chanTopic)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'categories', filter: `uid=eq.${user.uid}` }, () => {
+            db.from('categories').select('*').eq('uid', user.uid).then(r => { if (!r.error) setCategories(r.data || []); });
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `uid=eq.${user.uid}` }, () => {
+            db.from('transactions').select('*').eq('uid', user.uid).then(r => { if (!r.error) setTransactions((r.data || []).sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())); });
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'subscriptions', filter: `uid=eq.${user.uid}` }, () => {
+            db.from('subscriptions').select('*').eq('uid', user.uid).then(r => { if (!r.error) setSubscriptions(r.data || []); });
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'credit_cards', filter: `uid=eq.${user.uid}` }, () => {
+            db.from('credit_cards').select('*').eq('uid', user.uid).then(r => { if (!r.error) setCreditCards(r.data || []); });
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'disclosures', filter: `uid=eq.${user.uid}` }, () => {
+            db.from('disclosures').select('*').eq('uid', user.uid).then(r => { if (!r.error) setDisclosures(r.data || []); });
+          }).subscribe();
+      } catch (err: any) {
+        handleFirestoreError(err, OperationType.LIST, "users/" + user?.uid + "/dashboard");
+      } finally {
+        setLoading(false);
+      }
+    };
+    init();
+    return () => { if (channel?.unsubscribe) channel.unsubscribe(); };
   }, []);
 
   const getCategoryName = (id: string) => categories.find(c => c.id === id)?.name || 'Unknown';
@@ -54,15 +90,57 @@ export default function Dashboard() {
 
   const chartData = Object.values(monthlyData);
 
+  // Compute visible range for income/expense chart (with padding) — kept for analytics calculations
+  const ieValues = chartData.flatMap(d => [Number(d.income || 0), Number(d.expense || 0)]);
+  const ieMinRaw = ieValues.length ? Math.min(...ieValues) : 0;
+  const ieMaxRaw = ieValues.length ? Math.max(...ieValues) : 0;
+  const iePadding = Math.max((ieMaxRaw - ieMinRaw) * 0.1, 1);
+  const ieDomain = [Math.min(0, ieMinRaw - iePadding), ieMaxRaw + iePadding] as [number, number];
+
   // Cumulative net worth (simplified: income - expense)
-  let cumulative = 0;
-  const netWorthData = chartData.map(d => {
-    cumulative += (d.income - d.expense);
-    return { name: d.name, amount: cumulative };
+  // Compute cumulative net from transactions only, then shift series so final point equals current disclosures net.
+  const disclosuresNet = disclosures.reduce((acc, d) => {
+    const amt = Number(d.amount || 0);
+    return acc + (d.type === 'liability' ? -amt : amt);
+  }, 0);
+
+  // cumulative from transactions (oldest -> newest)
+  let cumulativeTrans = 0;
+  const transCumulative = chartData.map(d => {
+    cumulativeTrans += (d.income - d.expense);
+    return { name: d.name, amount: cumulativeTrans };
   });
 
-  const upcomingBills = subscriptions.map(s => ({ type: 'Subscription', name: s.name, amount: s.amount, nextDate: s.deductionDate })).concat(
-    creditCards.map(c => ({ type: 'Credit Card', name: c.name, amount: 'Varies', nextDate: c.dueDate }))
+  const cumulativeTransLatest = transCumulative.length ? transCumulative[transCumulative.length - 1].amount : 0;
+  const offset = disclosuresNet - cumulativeTransLatest; // shift so final equals disclosuresNet
+
+  const netWorthData = transCumulative.map(d => ({ name: d.name, amount: d.amount + offset }));
+
+  // Compute visible range for net worth chart
+  const nwValues = netWorthData.map(d => Number(d.amount || 0));
+  const nwMinRaw = nwValues.length ? Math.min(...nwValues) : 0;
+  const nwMaxRaw = nwValues.length ? Math.max(...nwValues) : 0;
+  const nwPadding = Math.max((nwMaxRaw - nwMinRaw) * 0.1, 1);
+  const nwDomain = [nwMinRaw - nwPadding, nwMaxRaw + nwPadding] as [number, number];
+
+  // Additional insights computations
+  const totalAssets = disclosures.filter(d => d.type === 'asset').reduce((s, d) => s + Number(d.amount || 0), 0);
+  const totalLiabilities = disclosures.filter(d => d.type === 'liability').reduce((s, d) => s + Number(d.amount || 0), 0);
+
+  const avgMonthlyIncome = chartData.length ? chartData.reduce((s, d) => s + Number(d.income || 0), 0) / chartData.length : 0;
+  const avgMonthlyExpense = chartData.length ? chartData.reduce((s, d) => s + Number(d.expense || 0), 0) / chartData.length : 0;
+
+  // Top expense category
+  const expenseByCategory: Record<string, number> = {};
+  transactions.filter(t => t.type !== 'income').forEach(t => {
+    const cid = t.category_id || t.categoryId || 'uncategorized';
+    expenseByCategory[cid] = (expenseByCategory[cid] || 0) + Number(t.amount || 0);
+  });
+  const topExpenseCatId = Object.keys(expenseByCategory).sort((a, b) => (expenseByCategory[b] || 0) - (expenseByCategory[a] || 0))[0];
+  const topExpenseCategory = topExpenseCatId ? getCategoryName(topExpenseCatId) : '—';
+
+  const upcomingBills = subscriptions.map(s => ({ type: 'Subscription', name: s.name, amount: s.amount, nextDate: s.deduction_date || s.deductionDate })).concat(
+    creditCards.map(c => ({ type: 'Credit Card', name: c.name, amount: 'Varies', nextDate: c.due_date || c.dueDate }))
   );
   
   const todayDateObj = new Date().getDate();
@@ -72,8 +150,8 @@ export default function Dashboard() {
 
   const handleExport = () => {
     const data = transactions.map(t => ({
-      Date: format(new Date(t.date), 'MM/dd/yyyy'),
-      Category: getCategoryName(t.categoryId),
+      Date: formatDate(t.date),
+      Category: getCategoryName(t.category_id || t.categoryId),
       Type: t.type,
       Amount: t.amount,
       Comment: t.comment
@@ -82,122 +160,109 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
-        <Button variant="outline" onClick={handleExport}><Download className="h-4 w-4 mr-2"/> Export Data</Button>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">This Month's Income</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">${totalIncome.toFixed(2)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">This Month's Expenses</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">${totalExpense.toFixed(2)}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Net Savings</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">${(totalIncome - totalExpense).toFixed(2)}</div>
-          </CardContent>
-        </Card>
+    <div className="space-y-4">
+      <LoadingOverlay show={loading} label="Loading dashboard" />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
+          <p className="text-sm text-muted-foreground mt-1">Your financial overview at a glance</p>
+        </div>
+        <div className="flex w-full items-center gap-2 sm:w-auto">
+          <Button variant="outline" onClick={handleExport} className="w-full sm:w-auto"><Download className="h-4 w-4 mr-2"/> Export</Button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Income vs Expenses (6 Months)</CardTitle>
-          </CardHeader>
-          <CardContent className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => "$" + value} />
-                <Tooltip cursor={{fill: 'transparent'}} />
-                <Bar dataKey="income" fill="#16a34a" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="expense" fill="#dc2626" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader>
-            <CardTitle>Cumulative Net Worth Trend</CardTitle>
-          </CardHeader>
-          <CardContent className="h-[300px]">
-             <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={netWorthData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis fontSize={12} tickLine={false} axisLine={false} tickFormatter={(value) => "$" + value} />
-                <Tooltip />
-                <Line type="monotone" dataKey="amount" stroke="#2563eb" strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-      </div>
-      
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Recent Transactions</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {transactions.slice(0, 5).map(t => (
-                <div key={t.id} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
-                  <div>
-                    <div className="font-medium">{getCategoryName(t.categoryId)}</div>
-                    <div className="text-xs text-muted-foreground">{format(new Date(t.date), 'MMM d, yyyy')}</div>
-                  </div>
-                  <div className={"font-medium " + (t.type === 'income' ? 'text-green-600' : 'text-red-600')}>
-                    {t.type === 'income' ? '+' : '-'}${t.amount.toFixed(2)}
-                  </div>
-                </div>
-              ))}
-              {transactions.length === 0 && <div className="text-sm text-muted-foreground">No recent transactions.</div>}
-            </div>
-          </CardContent>
-        </Card>
-        
-        <Card>
-          <CardHeader>
-            <CardTitle>Upcoming Bills (This Month)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {upcomingBills.map((b, i) => (
-                <div key={i} className="flex items-center justify-between border-b pb-2 last:border-0 last:pb-0">
-                  <div>
-                    <div className="font-medium">{b.name}</div>
-                    <div className="text-xs text-muted-foreground">{b.type} (Due: Day {b.nextDate} each month)</div>
-                  </div>
-                  <div className="font-medium text-red-600">
-                    {typeof b.amount === 'number' ? "$" + b.amount.toFixed(2) : b.amount}
-                  </div>
-                </div>
-              ))}
-              {upcomingBills.length === 0 && <div className="text-sm text-muted-foreground">No upcoming bills.</div>}
-            </div>
-          </CardContent>
-        </Card>
+      {/* Top summary strip */}
+      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
+        <Card><CardContent className="flex min-w-0 items-center gap-3 p-3"><div className="shrink-0 p-2 rounded-md bg-green-50 text-green-600"><TrendingUp className="h-5 w-5"/></div><div className="min-w-0"><div className="text-xs text-muted-foreground">Income (This Month)</div><div className="break-words text-base font-bold text-green-700 sm:text-lg">{formatCurrency(totalIncome)}</div></div></CardContent></Card>
+        <Card><CardContent className="flex min-w-0 items-center gap-3 p-3"><div className="shrink-0 p-2 rounded-md bg-red-50 text-red-600"><TrendingDown className="h-5 w-5"/></div><div className="min-w-0"><div className="text-xs text-muted-foreground">Expenses (This Month)</div><div className="break-words text-base font-bold text-red-700 sm:text-lg">{formatCurrency(totalExpense)}</div></div></CardContent></Card>
+        <Card><CardContent className="flex min-w-0 items-center gap-3 p-3"><div className="shrink-0 p-2 rounded-md bg-indigo-50 text-indigo-700"><CCIcon className="h-5 w-5"/></div><div className="min-w-0"><div className="text-xs text-muted-foreground">Net Worth</div><div className="break-words text-base font-bold text-indigo-700 sm:text-lg">{formatCurrency(netWorthData[netWorthData.length - 1]?.amount || 0)}</div></div></CardContent></Card>
+        <Card><CardContent className="flex min-w-0 items-center gap-3 p-3"><div className="shrink-0 p-2 rounded-md bg-slate-100 text-slate-700"><Wallet className="h-5 w-5"/></div><div className="min-w-0"><div className="text-xs text-muted-foreground">Net Savings</div><div className="break-words text-base font-bold sm:text-lg">{formatCurrency(totalIncome - totalExpense)}</div></div></CardContent></Card>
       </div>
 
+      {/* Main content: left large column, right narrow column */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Financial Snapshot</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="min-w-0 p-3 rounded-md bg-green-50">
+                  <div className="text-xs text-muted-foreground">Total Assets</div>
+                  <div className="break-words text-base font-bold text-green-700 sm:text-lg">{formatCurrency(totalAssets)}</div>
+                </div>
+                <div className="min-w-0 p-3 rounded-md bg-red-50">
+                  <div className="text-xs text-muted-foreground">Total Liabilities</div>
+                  <div className="break-words text-base font-bold text-red-700 sm:text-lg">{formatCurrency(totalLiabilities)}</div>
+                </div>
+                <div className="min-w-0 p-3 rounded-md bg-indigo-50">
+                  <div className="text-xs text-muted-foreground">Net Worth (disclosures)</div>
+                  <div className="break-words text-base font-bold text-indigo-700 sm:text-lg">{formatCurrency(totalAssets - totalLiabilities)}</div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Recent Transactions</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2">
+                {transactions.slice(0, 8).map(t => (
+                  <div key={t.id} className="flex min-w-0 items-center justify-between gap-3 py-2 border-b last:border-0">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{getCategoryName(t.category_id || t.categoryId)}</div>
+                      <div className="text-xs text-muted-foreground">{formatDate(t.date)}</div>
+                    </div>
+                    <div className={"shrink-0 text-right font-medium " + (t.type === 'income' ? 'text-green-600' : 'text-red-600')}>
+                      {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
+                    </div>
+                  </div>
+                ))}
+                {transactions.length === 0 && <div className="text-sm text-muted-foreground">No recent transactions.</div>}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Monthly Insights</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 text-sm">
+                <div className="flex min-w-0 justify-between gap-3"><span className="text-muted-foreground">Avg Monthly Income</span><span className="break-words text-right font-semibold">{formatCurrency(avgMonthlyIncome)}</span></div>
+                <div className="flex min-w-0 justify-between gap-3"><span className="text-muted-foreground">Avg Monthly Expense</span><span className="break-words text-right font-semibold text-red-600">{formatCurrency(avgMonthlyExpense)}</span></div>
+                <div className="flex min-w-0 justify-between gap-3"><span className="text-muted-foreground">Top Expense Category</span><span className="min-w-0 break-words text-right font-semibold">{topExpenseCategory}</span></div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Upcoming Bills (This Month)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-2 text-sm">
+                {upcomingBills.slice(0,6).map((b, i) => (
+                  <div key={i} className="flex min-w-0 items-center justify-between gap-3 py-1">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{b.name}</div>
+                      <div className="text-xs text-muted-foreground">{b.type} • Day {b.nextDate}</div>
+                    </div>
+                    <div className="shrink-0 text-right font-medium text-red-600">{typeof b.amount === 'number' ? formatCurrency(b.amount) : b.amount}</div>
+                  </div>
+                ))}
+                {upcomingBills.length === 0 && <div className="text-sm text-muted-foreground">No upcoming bills.</div>}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { auth, db } from '../lib/firebase';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from '../components/ui/card';
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../components/ui/card';
 import { Label } from '../components/ui/label';
 import { Input } from '../components/ui/input';
 import { Button } from '../components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { toast } from 'sonner';
 import { handleFirestoreError, OperationType } from '../lib/firestoreAuthError';
+import LoadingOverlay from '../components/ui/loading-overlay';
+import { hasStoredLocalization, isDefaultLocalization, localeForCurrency, readStoredLocalization, storeLocalization } from '../lib/localization';
 
 export default function Profile() {
   const [profile, setProfile] = useState<any>(null);
@@ -17,46 +18,102 @@ export default function Profile() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (auth.currentUser) {
-      const p = doc(db, 'users', auth.currentUser.uid);
-      getDoc(p).then(d => {
-        if (d.exists()) {
-          const data = d.data();
-          setProfile(data);
-          setName(data.name || '');
-          setCurrency(data.currency || 'USD');
-          setDateFormat(data.dateFormat || 'MM/dd/yyyy');
-        }
-      }).catch(err => {
-        handleFirestoreError(err, OperationType.GET, "users/" + auth.currentUser?.uid);
-      });
-    }
+    const storedPrefs = readStoredLocalization();
+    setCurrency(storedPrefs.currency);
+    setDateFormat(storedPrefs.dateFormat);
+
+    const init = async () => {
+      setLoading(true);
+      const user = auth.currentUser || await auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const { data, error } = await db.from('users').select('*').eq('uid', user.uid).single();
+        if (error) throw error;
+        const storedPrefs = readStoredLocalization();
+        const remotePrefs = {
+          currency: data.currency || 'USD',
+          dateFormat: data.date_format || data.dateFormat || 'MM/dd/yyyy',
+          locale: data.locale || localeForCurrency(data.currency || 'USD'),
+        };
+        const effectivePrefs = hasStoredLocalization() && !isDefaultLocalization(storedPrefs) && isDefaultLocalization(remotePrefs)
+          ? storedPrefs
+          : remotePrefs;
+
+        setProfile(data);
+        setName(data.name || '');
+        setCurrency(effectivePrefs.currency);
+        setDateFormat(effectivePrefs.dateFormat);
+        storeLocalization(effectivePrefs);
+      } catch (err: any) {
+        handleFirestoreError(err, OperationType.GET, "users/" + user?.uid);
+      } finally {
+        setLoading(false);
+      }
+    };
+    init();
   }, []);
 
   const handleUpdate = async () => {
-    if (!auth.currentUser) return;
+    const user = auth.currentUser || await auth.getUser();
+    if (!user) return;
     setLoading(true);
     try {
-      const p = doc(db, 'users', auth.currentUser.uid);
-      await updateDoc(p, {
-        name,
+      const nextPrefs = {
         currency,
         dateFormat,
-        updatedAt: new Date().getTime()
+        locale: localeForCurrency(currency),
+      };
+      storeLocalization(nextPrefs);
+      const payload = {
+        uid: user.uid,
+        email: profile?.email || user.email,
+        name,
+        currency: nextPrefs.currency,
+        date_format: nextPrefs.dateFormat,
+        locale: nextPrefs.locale,
+        created_at: profile?.created_at || Date.now(),
+        updated_at: Date.now(),
+      };
+      const { data, error } = await db
+        .from('users')
+        .upsert([payload], { onConflict: 'uid' })
+        .select('*')
+        .single();
+      if (error) throw error;
+      if (!data || data.currency !== nextPrefs.currency || data.date_format !== nextPrefs.dateFormat || data.name !== name) {
+        throw new Error('Profile was not saved by the database. Please check your Supabase users table RLS policy.');
+      }
+      setProfile(data);
+      setCurrency(data.currency || nextPrefs.currency);
+      setDateFormat(data.date_format || nextPrefs.dateFormat);
+      storeLocalization({
+        currency: data.currency || nextPrefs.currency,
+        dateFormat: data.date_format || nextPrefs.dateFormat,
+        locale: data.locale || nextPrefs.locale,
       });
       toast.success('Profile updated');
     } catch (err: any) {
       toast.error(err.message);
-      handleFirestoreError(err, OperationType.UPDATE, "users/" + auth.currentUser.uid);
+      handleFirestoreError(err, OperationType.UPDATE, "users/" + user.uid);
     } finally {
       setLoading(false);
     }
   };
 
-  if (!profile) return <div>Loading...</div>;
+  if (!profile) {
+    return (
+      <div className="flex min-h-[60vh] items-center justify-center">
+        <LoadingOverlay show={loading} label="Loading profile" />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
+      <LoadingOverlay show={loading} label="Saving preferences" />
       <div>
         <h2 className="text-3xl font-bold tracking-tight">Profile & Preferences</h2>
         <p className="text-muted-foreground">Manage your account settings and localization preferences.</p>
@@ -113,9 +170,14 @@ export default function Profile() {
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={handleUpdate} disabled={loading}>{loading ? 'Saving...' : 'Save Preferences'}</Button>
         </CardContent>
       </Card>
+
+      <div className="flex justify-end">
+        <Button onClick={handleUpdate} disabled={loading} className="w-full sm:w-auto">
+          {loading ? 'Saving...' : 'Save Preferences'}
+        </Button>
+      </div>
     </div>
   );
 }

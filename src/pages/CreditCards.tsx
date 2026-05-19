@@ -1,7 +1,6 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
 import { auth, db } from '../lib/firebase';
-import { collection, setDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -10,6 +9,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
 import { handleFirestoreError, OperationType } from '../lib/firestoreAuthError';
 import { Trash2, Plus } from 'lucide-react';
+import LoadingOverlay from '../components/ui/loading-overlay';
 
 export default function CreditCards() {
   const [cards, setCards] = useState<any[]>([]);
@@ -19,10 +19,30 @@ export default function CreditCards() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!auth.currentUser) return;
-    const ref = collection(db, 'users', auth.currentUser.uid, 'creditCards');
-    const unsub = onSnapshot(ref, (snap) => setCards(snap.docs.map(d => d.data())), (err) => handleFirestoreError(err, OperationType.LIST, "users/" + auth.currentUser?.uid + "/creditCards"));
-    return () => unsub();
+    let channel: any;
+    const init = async () => {
+      setLoading(true);
+      const user = auth.currentUser || await auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const { data, error } = await db.from('credit_cards').select('*').eq('uid', user.uid);
+        if (error) throw error;
+        setCards(data || []);
+          const chanTopic = `public:credit_cards_${user.uid}_${Date.now()}`;
+          channel = db.channel(chanTopic).on('postgres_changes', { event: '*', schema: 'public', table: 'credit_cards', filter: `uid=eq.${user.uid}` }, () => {
+            db.from('credit_cards').select('*').eq('uid', user.uid).then(r => { if (!r.error) setCards(r.data || []); });
+          }).subscribe();
+      } catch (err: any) {
+        handleFirestoreError(err, OperationType.LIST, "users/" + user?.uid + "/creditCards");
+      } finally {
+        setLoading(false);
+      }
+    };
+    init();
+    return () => { if (channel?.unsubscribe) channel.unsubscribe(); };
   }, []);
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -30,15 +50,14 @@ export default function CreditCards() {
     if (!name || !dueDate || !auth.currentUser) return;
     setLoading(true);
     try {
+      const user = auth.currentUser || await auth.getUser();
       const id = uuidv4();
-      const ref = doc(db, 'users', auth.currentUser.uid, 'creditCards', id);
-      await setDoc(ref, {
-        id,
-        uid: auth.currentUser.uid,
-        name,
-        dueDate: parseInt(dueDate, 10),
-        createdAt: new Date().getTime(),
-        updatedAt: new Date().getTime()
+      const payload = { id, uid: user.uid, name, due_date: parseInt(dueDate, 10), created_at: new Date().getTime(), updated_at: new Date().getTime() };
+      const { error } = await db.from('credit_cards').upsert([payload], { onConflict: 'id' });
+      if (error) throw error;
+      setCards(prev => {
+        const list = (prev || []).filter(c => c.id !== id);
+        return [payload, ...list];
       });
       setOpen(false);
       setName('');
@@ -53,25 +72,29 @@ export default function CreditCards() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!auth.currentUser) return;
+    setLoading(true);
     try {
-      await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'creditCards', id));
+      const user = auth.currentUser || await auth.getUser();
+      await db.from('credit_cards').delete().eq('id', id).eq('uid', user.uid);
       toast.success('Credit Card deleted');
     } catch (err: any) {
       toast.error(err.message);
-      handleFirestoreError(err, OperationType.DELETE, "users/" + auth.currentUser.uid + "/creditCards/" + id);
+      handleFirestoreError(err, OperationType.DELETE, "users/" + (auth.currentUser?.uid || '') + "/creditCards/" + id);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
+      <LoadingOverlay show={loading} label="Updating cards" />
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
           <h2 className="text-3xl font-bold tracking-tight">Credit Cards</h2>
           <p className="text-muted-foreground">Manage credit cards and due dates.</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger render={<Button />}>
+          <DialogTrigger render={<Button className="w-full sm:w-auto" />}>
             <Plus className="h-4 w-4 mr-2" /> Add Card
           </DialogTrigger>
           <DialogContent>
@@ -103,7 +126,7 @@ export default function CreditCards() {
               </Button>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">Due on the {c.dueDate}{c.dueDate === 1 ? 'st' : c.dueDate === 2 ? 'nd' : c.dueDate === 3 ? 'rd' : 'th'}</p>
+                <p className="break-words text-xl font-bold sm:text-2xl">Due on the { (c.due_date || c.dueDate) }{(c.due_date || c.dueDate) === 1 ? 'st' : (c.due_date || c.dueDate) === 2 ? 'nd' : (c.due_date || c.dueDate) === 3 ? 'rd' : 'th'}</p>
             </CardContent>
           </Card>
         ))}

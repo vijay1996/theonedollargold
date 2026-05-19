@@ -5,10 +5,10 @@
 
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router';
-import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from './lib/firebase';
 import { AppLayout } from './components/layout/AppLayout';
 import { Toaster } from './components/ui/sonner';
+import Loader from './components/ui/loader';
 import Login from './pages/Login';
 import Landing from './pages/Landing';
 import Dashboard from './pages/Dashboard';
@@ -18,9 +18,18 @@ import Budgets from './pages/Budgets';
 import Subscriptions from './pages/Subscriptions';
 import CreditCards from './pages/CreditCards';
 import Profile from './pages/Profile';
+import Assets from './pages/Assets';
+import Reports from './pages/reports/Reports';
+import Investments from './pages/Investments';
 
 function ProtectedRoute({ user, loading }: { user: any; loading: boolean }) {
-  if (loading) return <div className="p-8 text-center text-muted-foreground flex h-screen items-center justify-center">Loading...</div>;
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-950">
+        <Loader size={64} label="Preparing your dashboard" />
+      </div>
+    );
+  }
   if (!user) return <Navigate to="/login" replace />;
   return <Outlet />;
 }
@@ -30,11 +39,16 @@ export default function App() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (u) => {
+    const unsub = auth.onAuthStateChanged(async (u: any) => {
       setUser(u);
       setLoading(false);
     });
-    return () => unsub();
+    // attempt to populate currentUser immediately
+    auth.getUser().then((u: any) => {
+      setUser(u);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+    return () => { if (typeof unsub === 'function') unsub(); };
   }, []);
 
   return (
@@ -50,9 +64,12 @@ export default function App() {
               <Route path="dashboard" element={<Dashboard />} />
               <Route path="transactions" element={<Transactions />} />
               <Route path="categories" element={<Categories />} />
+              <Route path="assets" element={<Assets />} />
+              <Route path="investments" element={<Investments />} />
               <Route path="budgets" element={<Budgets />} />
               <Route path="subscriptions" element={<Subscriptions />} />
               <Route path="cards" element={<CreditCards />} />
+              <Route path="reports" element={<Reports />} />
               <Route path="profile" element={<Profile />} />
             </Route>
           </Route>

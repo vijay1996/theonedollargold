@@ -27,18 +27,24 @@ export interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const stringifyError = (e: unknown) => {
+    if (e instanceof Error) return e.message;
+    try {
+      return typeof e === 'string' ? e : JSON.stringify(e, Object.getOwnPropertyNames(e));
+    } catch {
+      return String(e);
+    }
+  };
+
   const errInfo: FirestoreErrorInfo = {
-    error: error instanceof Error ? error.message : String(error),
+    error: stringifyError(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
+      userId: auth.currentUser?.uid || auth.currentUser?.id,
       email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData?.map(provider => ({
-        providerId: provider.providerId,
-        email: provider.email,
-      })) || []
+      emailVerified: (auth.currentUser as any)?.email_confirmed || null,
+      isAnonymous: null,
+      tenantId: null,
+      providerInfo: []
     },
     operationType,
     path

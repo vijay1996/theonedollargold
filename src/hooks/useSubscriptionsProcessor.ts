@@ -1,6 +1,5 @@
 import { useEffect, useRef } from 'react';
 import { auth, db } from '../lib/firebase';
-import { collection, getDocs, doc, writeBatch } from 'firebase/firestore';
 import { v4 as uuidv4 } from 'uuid';
 import { format, parseISO } from 'date-fns';
 
@@ -15,89 +14,79 @@ export function useSubscriptionsProcessor() {
       processed.current = true;
       try {
         const uid = auth.currentUser!.uid;
-        
-        // Fetch subscriptions
-        const subsSnap = await getDocs(collection(db, 'users', uid, 'subscriptions'));
-        const subscriptions = subsSnap.docs.map(d => d.data());
-        
-        if (subscriptions.length === 0) return;
 
-        // Fetch transactions
-        const transSnap = await getDocs(collection(db, 'users', uid, 'transactions'));
-        const transactions = transSnap.docs.map(d => d.data());
+        const { data: subscriptions } = await db.from('subscriptions').select('*').eq('uid', uid);
+        if (!subscriptions || subscriptions.length === 0) return;
 
-        const batch = writeBatch(db);
-        let count = 0;
+        const { data: transactions } = await db.from('transactions').select('*').eq('uid', uid);
+
+        const inserts: any[] = [];
 
         const now = new Date();
         const currentMonth = now.getMonth();
         const currentYear = now.getFullYear();
         const currentDate = now.getDate();
 
-        subscriptions.forEach(sub => {
+        subscriptions.forEach((sub: any) => {
           let shouldProcess = false;
-          let expectedDate: Date;
+          let expectedDate: Date | undefined;
 
           if (sub.frequency === 'yearly') {
-             // 1-based deductionMonth from UI, convert to 0-based
-             const subMonth = sub.deductionMonth ? sub.deductionMonth - 1 : 0; 
-             if (currentYear > 2000) { // Just a sanity check
-                if (currentMonth > subMonth || (currentMonth === subMonth && currentDate >= sub.deductionDate)) {
-                   shouldProcess = true;
-                   expectedDate = new Date(currentYear, subMonth, sub.deductionDate);
-                } else {
-                   // If we are before the deduction date of this year, wait until that day.
-                   // But maybe it's missing for last year!
-                   // For simplicity, we just won't retroactively process previous years in this basic script, 
-                   // or we could check if there's no transaction for last year.
-                }
-             }
+            const subMonth = sub.deduction_month ? sub.deduction_month - 1 : (sub.deductionMonth ? sub.deductionMonth - 1 : 0);
+            if (currentYear > 2000) {
+              const dedDate = sub.deduction_date ?? sub.deductionDate;
+              if (currentMonth > subMonth || (currentMonth === subMonth && currentDate >= dedDate)) {
+                shouldProcess = true;
+                expectedDate = new Date(currentYear, subMonth, dedDate);
+              }
+            }
           } else {
-             // Monthly
-             if (currentDate >= sub.deductionDate) {
-               shouldProcess = true;
-               expectedDate = new Date(currentYear, currentMonth, sub.deductionDate);
-             }
+            const dedDate = sub.deduction_date ?? sub.deductionDate;
+            if (currentDate >= dedDate) {
+              shouldProcess = true;
+              expectedDate = new Date(currentYear, currentMonth, dedDate);
+            }
           }
 
-          if (shouldProcess) {
-            const expectedDateStr = format(expectedDate!, 'yyyy-MM-dd');
-            
-            const hasTransaction = transactions.some(t => {
-                if (t.subscriptionId === sub.id) {
-                    const tDate = parseISO(t.date);
-                    if (sub.frequency === 'yearly') {
-                        return tDate.getFullYear() === currentYear;
-                    } else {
-                        return tDate.getMonth() === expectedDate!.getMonth() && tDate.getFullYear() === currentYear;
-                    }
+          if (shouldProcess && expectedDate) {
+            const expectedDateStr = format(expectedDate, 'yyyy-MM-dd');
+            const hasTransaction = (transactions || []).some((t: any) => {
+              if ((t.subscription_id || t.subscriptionId) === sub.id) {
+                const tDate = parseISO(t.date);
+                if (sub.frequency === 'yearly') {
+                  return tDate.getFullYear() === currentYear;
+                } else {
+                  return tDate.getMonth() === expectedDate!.getMonth() && tDate.getFullYear() === currentYear;
                 }
-                return false;
+              }
+              return false;
             });
 
             if (!hasTransaction) {
-               const tId = uuidv4();
-               const ref = doc(db, 'users', uid, 'transactions', tId);
-               batch.set(ref, {
-                 id: tId,
-                 uid,
-                 date: expectedDateStr,
-                 categoryId: sub.categoryId,
-                 amount: parseFloat(sub.amount), // ensure it's a number
-                 type: 'expense',
-                 comment: `${sub.name} (Subscription)`,
-                 subscriptionId: sub.id,
-                 createdAt: now.getTime(),
-                 updatedAt: now.getTime()
-               });
-               count++;
+              const tId = uuidv4();
+              inserts.push({
+                id: tId,
+                uid,
+                date: expectedDateStr,
+                category_id: sub.category_id || sub.categoryId,
+                amount: parseFloat(sub.amount),
+                type: 'expense',
+                comment: `${sub.name} (Subscription)`,
+                subscription_id: sub.id,
+                created_at: now.getTime(),
+                updated_at: now.getTime()
+              });
             }
           }
         });
 
-        if (count > 0) {
-          await batch.commit();
-          console.log(`Processed ${count} subscription transactions`);
+        if (inserts.length > 0) {
+          const { error } = await db.from('transactions').insert(inserts);
+          if (error) {
+            console.error('Failed to insert subscription transactions', error);
+          } else {
+            console.log(`Processed ${inserts.length} subscription transactions`);
+          }
         }
 
       } catch (err) {

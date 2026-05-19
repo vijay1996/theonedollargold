@@ -1,7 +1,6 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
 import { auth, db } from '../lib/firebase';
-import { collection, query, getDocs, setDoc, deleteDoc, doc, onSnapshot } from 'firebase/firestore';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -11,6 +10,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
 import { handleFirestoreError, OperationType } from '../lib/firestoreAuthError';
 import { Trash2 } from 'lucide-react';
+import LoadingOverlay from '../components/ui/loading-overlay';
 
 export default function Categories() {
   const [categories, setCategories] = useState<any[]>([]);
@@ -21,15 +21,36 @@ export default function Categories() {
   const [filterType, setFilterType] = useState('all');
 
   useEffect(() => {
-    if (!auth.currentUser) return;
-    const catRef = collection(db, 'users', auth.currentUser.uid, 'categories');
-    const unsub = onSnapshot(catRef, (snap) => {
-      const data = snap.docs.map(d => d.data());
-      setCategories(data);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, "users/" + auth.currentUser?.uid + "/categories");
-    });
-    return () => unsub();
+    let channel: any;
+    const init = async () => {
+      setLoading(true);
+      const user = auth.currentUser || await auth.getUser();
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const { data, error } = await db.from('categories').select('*').eq('uid', user.uid);
+        if (error) throw error;
+        setCategories(data || []);
+
+        const chanTopic = `public:categories_${user.uid}_${Date.now()}`;
+        channel = db.channel(chanTopic)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'categories', filter: `uid=eq.${user.uid}` }, payload => {
+            // fetch latest list on any change
+            db.from('categories').select('*').eq('uid', user.uid).then(res => {
+              if (res.error) return;
+              setCategories(res.data || []);
+            });
+          }).subscribe();
+      } catch (err: any) {
+        handleFirestoreError(err, OperationType.LIST, "users/" + user?.uid + "/categories");
+      } finally {
+        setLoading(false);
+      }
+    };
+    init();
+    return () => { if (channel?.unsubscribe) channel.unsubscribe(); };
   }, []);
 
   const handleAdd = async (e: React.FormEvent) => {
@@ -46,15 +67,23 @@ export default function Categories() {
     setLoading(true);
     try {
       const id = uuidv4();
-      const ref = doc(db, 'users', auth.currentUser.uid, 'categories', id);
-      await setDoc(ref, {
-        id,
-        uid: auth.currentUser.uid,
-        name,
-        type,
-        createdAt: new Date().getTime(),
-        updatedAt: new Date().getTime()
-      });
+      const user = auth.currentUser || await auth.getUser();
+      const payload = { id, uid: user.uid, name, type, created_at: new Date().getTime(), updated_at: new Date().getTime() };
+      // Use upsert with onConflict on id to avoid primary-key conflicts (HTTP 409)
+      const { error } = await db.from('categories').upsert([payload], { onConflict: 'id' });
+      if (error) {
+        if ((error as any).status === 409) {
+          toast.error('Category already exists (conflict).');
+        } else {
+          throw error;
+        }
+      } else {
+        // Optimistically update UI immediately so user sees the new category without waiting for realtime
+        setCategories(prev => {
+          const filtered = (prev || []).filter(c => c.id !== payload.id);
+          return [...filtered, payload];
+        });
+      }
       setName('');
       toast.success('Category added');
     } catch (err: any) {
@@ -66,19 +95,23 @@ export default function Categories() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!auth.currentUser) return;
+    setLoading(true);
     try {
-      await deleteDoc(doc(db, 'users', auth.currentUser.uid, 'categories', id));
+      const user = auth.currentUser || await auth.getUser();
+      await db.from('categories').delete().eq('id', id).eq('uid', user.uid);
       toast.success('Category deleted');
     } catch (err: any) {
       toast.error(err.message);
-      handleFirestoreError(err, OperationType.DELETE, "users/" + auth.currentUser.uid + "/categories/" + id);
+      handleFirestoreError(err, OperationType.DELETE, "users/" + (auth.currentUser?.uid || '') + "/categories/" + id);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <div className="space-y-6">
-      <div>
+      <LoadingOverlay show={loading} label="Updating categories" />
+      <div className="min-w-0">
         <h2 className="text-3xl font-bold tracking-tight">Categories</h2>
         <p className="text-muted-foreground">Manage your income and expense categories.</p>
       </div>
@@ -88,12 +121,12 @@ export default function Categories() {
           <CardTitle>Add New Category</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleAdd} className="flex gap-4 items-end">
-            <div className="flex-1 space-y-2">
+          <form onSubmit={handleAdd} className="grid grid-cols-1 gap-4 sm:grid-cols-[minmax(0,1fr)_180px_auto] sm:items-end">
+            <div className="min-w-0 space-y-2">
               <label className="text-sm font-medium">Category Name</label>
               <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. Groceries" />
             </div>
-            <div className="w-1/4 space-y-2">
+            <div className="min-w-0 space-y-2">
               <label className="text-sm font-medium">Type</label>
               <Select value={type} onValueChange={setType}>
                 <SelectTrigger>
@@ -105,7 +138,7 @@ export default function Categories() {
                 </SelectContent>
               </Select>
             </div>
-            <Button type="submit" disabled={loading}>Add Category</Button>
+            <Button type="submit" disabled={loading} className="w-full self-end sm:w-auto">Add Category</Button>
           </form>
         </CardContent>
       </Card>
@@ -113,7 +146,7 @@ export default function Categories() {
       <Card>
         <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <CardTitle>Your Categories</CardTitle>
-          <div className="flex flex-col sm:flex-row gap-2">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
             <Input 
               placeholder="Search categories..." 
               value={searchQuery}
@@ -134,7 +167,7 @@ export default function Categories() {
             </Select>
           </div>
         </CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardContent className="overflow-x-auto px-0 sm:px-4">
           {categories.filter(c => {
             if (filterType !== 'all' && c.type !== filterType) return false;
             if (searchQuery && !c.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;

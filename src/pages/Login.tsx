@@ -2,12 +2,11 @@ import React from 'react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { auth, db } from '../lib/firebase';
-import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Label } from '../components/ui/label';
+import LoadingOverlay from '../components/ui/loading-overlay';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -22,23 +21,19 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
-      let userCred;
       if (isRegister) {
-        userCred = await createUserWithEmailAndPassword(auth, email, password);
-        await setDoc(doc(db, 'users', userCred.user.uid), {
-          uid: userCred.user.uid,
-          email: userCred.user.email,
-          name: email.split('@')[0],
-          currency: 'USD',
-          dateFormat: 'MM/dd/yyyy',
-          locale: 'en-US',
-          createdAt: new Date().getTime(),
-          updatedAt: new Date().getTime()
-        });
+        const { data, error } = await db.auth.signUp({ email, password });
+        if (error) throw error;
+        // create profile row if needed
+        if (data?.user) {
+          await db.from('users').upsert({ uid: data.user.id, email: data.user.email, name: email.split('@')[0], currency: 'USD', date_format: 'MM/dd/yyyy', locale: 'en-US', created_at: new Date().getTime(), updated_at: new Date().getTime() });
+        }
+        navigate('/finance/dashboard');
       } else {
-        userCred = await signInWithEmailAndPassword(auth, email, password);
+        const { data, error } = await db.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        navigate('/finance/dashboard');
       }
-      navigate('/finance/dashboard');
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -50,22 +45,8 @@ export default function Login() {
     setLoading(true);
     setError('');
     try {
-      const provider = new GoogleAuthProvider();
-      const userCred = await signInWithPopup(auth, provider);
-      const userDoc = await getDoc(doc(db, 'users', userCred.user.uid));
-      if (!userDoc.exists()) {
-        await setDoc(doc(db, 'users', userCred.user.uid), {
-          uid: userCred.user.uid,
-          email: userCred.user.email,
-          name: userCred.user.displayName || userCred.user.email?.split('@')[0] || 'User',
-          currency: 'USD',
-          dateFormat: 'MM/dd/yyyy',
-          locale: 'en-US',
-          createdAt: new Date().getTime(),
-          updatedAt: new Date().getTime()
-        });
-      }
-      navigate('/finance/dashboard');
+      // Redirect to Supabase OAuth flow for Google
+      await db.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + '/finance/dashboard' } });
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -75,6 +56,7 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+      <LoadingOverlay show={loading} label={isRegister ? 'Creating account' : 'Signing you in'} />
       <Card className="w-full max-w-md shadow-xl rounded-2xl">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold tracking-tight">

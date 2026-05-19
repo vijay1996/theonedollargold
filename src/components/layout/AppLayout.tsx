@@ -1,7 +1,7 @@
+import { useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router';
-import { auth } from '../../lib/firebase';
-import { signOut } from 'firebase/auth';
-import { LayoutDashboard, Wallet, CreditCard, RefreshCw, Layers, PieChart, LogOut, Settings, Menu, ExternalLink } from 'lucide-react';
+import { auth, db } from '../../lib/firebase';
+import { LayoutDashboard, Wallet, CreditCard, RefreshCw, Layers, PieChart, LogOut, Settings, Menu, ExternalLink, BarChart2, TrendingUp } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '../ui/sheet';
 import { AIChat } from '../AIChat';
@@ -10,24 +10,28 @@ import { useSubscriptionsProcessor } from '../../hooks/useSubscriptionsProcessor
 export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   
   useSubscriptionsProcessor();
 
   const handleLogout = async () => {
-    await signOut(auth);
+    await db.auth.signOut();
     navigate('/login');
   };
 
   const navLinks = [
     { name: 'Dashboard', path: '/finance/dashboard', icon: LayoutDashboard },
+    { name: 'Reports', path: '/finance/reports', icon: BarChart2 },
     { name: 'Transactions', path: '/finance/transactions', icon: RefreshCw },
     { name: 'Budgets', path: '/finance/budgets', icon: PieChart },
+    { name: 'Assets & Liabilities', path: '/finance/assets', icon: Wallet },
+    { name: 'Investments', path: '/finance/investments', icon: TrendingUp },
     { name: 'Categories', path: '/finance/categories', icon: Layers },
     { name: 'Subscriptions', path: '/finance/subscriptions', icon: RefreshCw },
     { name: 'Credit Cards', path: '/finance/cards', icon: CreditCard },
   ];
 
-  const SidebarContent = () => (
+  const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => (
     <>
       <div className="p-4 flex items-center gap-2 text-white font-semibold text-lg border-b border-slate-800">
         <Wallet className="h-6 w-6 text-indigo-400" />
@@ -36,6 +40,7 @@ export function AppLayout() {
       <nav className="flex-1 py-4 space-y-1">
         <Link 
           to="/" 
+          onClick={onNavigate}
           className="flex items-center gap-3 px-4 py-2 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors text-sm mb-4"
         >
           <ExternalLink className="h-4 w-4" /> Back to Main Site
@@ -50,6 +55,7 @@ export function AppLayout() {
             <Link
               key={link.name}
               to={link.path}
+              onClick={onNavigate}
               className={`flex items-center gap-3 px-4 py-2 transition-colors ${
                 isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800 hover:text-white'
               }`}
@@ -60,10 +66,10 @@ export function AppLayout() {
         })}
       </nav>
       <div className="p-4 border-t border-slate-800 space-y-1">
-        <Link to="/finance/profile" className={`flex items-center gap-3 px-4 py-2 transition-colors font-medium ${location.pathname === '/finance/profile' ? 'bg-slate-800 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
+        <Link to="/finance/profile" onClick={onNavigate} className={`flex items-center gap-3 px-4 py-2 transition-colors font-medium ${location.pathname === '/finance/profile' ? 'bg-slate-800 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>
           <Settings className="h-5 w-5" /> Profile
         </Link>
-        <button onClick={handleLogout} className="flex items-center gap-3 px-4 py-2 hover:bg-slate-800 hover:text-white transition-colors w-full text-left font-medium text-red-400">
+        <button onClick={() => { onNavigate?.(); handleLogout(); }} className="flex items-center gap-3 px-4 py-2 hover:bg-slate-800 hover:text-white transition-colors w-full text-left font-medium text-red-400">
           <LogOut className="h-5 w-5" /> Log out
         </button>
       </div>
@@ -78,13 +84,13 @@ export function AppLayout() {
           <Wallet className="h-6 w-6 text-indigo-400" />
           <span>OneDollarGold</span>
         </div>
-        <Sheet>
+        <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
           <SheetTrigger render={<Button variant="ghost" size="icon" className="text-white hover:bg-slate-800 hover:text-white" />}>
             <Menu className="h-6 w-6" />
           </SheetTrigger>
           <SheetContent side="left" className="w-[280px] p-0 bg-slate-900 text-slate-300 border-r-slate-800 flex flex-col hide-close">
             <SheetTitle className="sr-only">Menu</SheetTitle>
-            <SidebarContent />
+            <SidebarContent onNavigate={() => setMobileNavOpen(false)} />
           </SheetContent>
         </Sheet>
       </div>
