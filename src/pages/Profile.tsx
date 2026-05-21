@@ -8,10 +8,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { toast } from 'sonner';
 import { handleFirestoreError, OperationType } from '../lib/firestoreAuthError';
 import LoadingOverlay from '../components/ui/loading-overlay';
-import { hasStoredLocalization, isDefaultLocalization, localeForCurrency, readStoredLocalization, storeLocalization } from '../lib/localization';
+import { hasStoredLocalization, isDefaultLocalization, localeForCurrency, readStoredLocalization, storeLocalization, LocalizationPrefs } from '../lib/localization';
+import { UserProfile } from './reports/useReportsData';
 
 export default function Profile() {
-  const [profile, setProfile] = useState<any>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
   const [name, setName] = useState('');
   const [currency, setCurrency] = useState('');
   const [dateFormat, setDateFormat] = useState('');
@@ -24,7 +25,7 @@ export default function Profile() {
 
     const init = async () => {
       setLoading(true);
-      const user = auth.currentUser || await auth.getUser();
+      const user = auth.currentUser || (typeof (auth as any).getUser === 'function' ? await (auth as any).getUser() : null);
       if (!user) {
         setLoading(false);
         return;
@@ -32,17 +33,17 @@ export default function Profile() {
       try {
         const { data, error } = await db.from('users').select('*').eq('uid', user.uid).single();
         if (error) throw error;
-        const storedPrefs = readStoredLocalization();
-        const remotePrefs = {
+        const storedPrefs: LocalizationPrefs = readStoredLocalization();
+        const remotePrefs: LocalizationPrefs = {
           currency: data.currency || 'USD',
-          dateFormat: data.date_format || data.dateFormat || 'MM/dd/yyyy',
+          dateFormat: data.date_format || 'MM/dd/yyyy',
           locale: data.locale || localeForCurrency(data.currency || 'USD'),
         };
-        const effectivePrefs = hasStoredLocalization() && !isDefaultLocalization(storedPrefs) && isDefaultLocalization(remotePrefs)
+        const effectivePrefs: LocalizationPrefs = hasStoredLocalization() && !isDefaultLocalization(storedPrefs) && isDefaultLocalization(remotePrefs)
           ? storedPrefs
           : remotePrefs;
 
-        setProfile(data);
+        setProfile(data as UserProfile);
         setName(data.name || '');
         setCurrency(effectivePrefs.currency);
         setDateFormat(effectivePrefs.dateFormat);
@@ -57,7 +58,7 @@ export default function Profile() {
   }, []);
 
   const handleUpdate = async () => {
-    const user = auth.currentUser || await auth.getUser();
+    const user = auth.currentUser || (typeof (auth as any).getUser === 'function' ? await (auth as any).getUser() : null);
     if (!user) return;
     setLoading(true);
     try {
@@ -68,7 +69,7 @@ export default function Profile() {
       };
       storeLocalization(nextPrefs);
       const payload = {
-        uid: user.uid,
+        uid: user.uid, // user.uid is guaranteed if user exists
         email: profile?.email || user.email,
         name,
         currency: nextPrefs.currency,
@@ -82,14 +83,14 @@ export default function Profile() {
         .upsert([payload], { onConflict: 'uid' })
         .select('*')
         .single();
-      if (error) throw error;
-      if (!data || data.currency !== nextPrefs.currency || data.date_format !== nextPrefs.dateFormat || data.name !== name) {
+      if (error) throw error; // data will be null if error
+      if (!data || data.currency !== nextPrefs.currency || data.date_format !== nextPrefs.dateFormat || data.name !== name) { // data is UserProfile
         throw new Error('Profile was not saved by the database. Please check your Supabase users table RLS policy.');
       }
-      setProfile(data);
-      setCurrency(data.currency || nextPrefs.currency);
-      setDateFormat(data.date_format || nextPrefs.dateFormat);
-      storeLocalization({
+      setProfile(data as UserProfile);
+      setCurrency((data as UserProfile).currency || nextPrefs.currency);
+      setDateFormat((data as UserProfile).date_format || nextPrefs.dateFormat);
+      storeLocalization({ // data is UserProfile
         currency: data.currency || nextPrefs.currency,
         dateFormat: data.date_format || nextPrefs.dateFormat,
         locale: data.locale || nextPrefs.locale,
@@ -144,7 +145,7 @@ export default function Profile() {
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label>Currency</Label>
-            <Select value={currency} onValueChange={setCurrency}>
+            <Select value={currency} onValueChange={v => setCurrency(String(v))}>
               <SelectTrigger>
                 <SelectValue placeholder="Select currency" />
               </SelectTrigger>
@@ -159,7 +160,7 @@ export default function Profile() {
           </div>
           <div className="space-y-2">
             <Label>Date Format</Label>
-            <Select value={dateFormat} onValueChange={setDateFormat}>
+            <Select value={dateFormat} onValueChange={v => setDateFormat(String(v))}>
               <SelectTrigger>
                 <SelectValue placeholder="Select format" />
               </SelectTrigger>

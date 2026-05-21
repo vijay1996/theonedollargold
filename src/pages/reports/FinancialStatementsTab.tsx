@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { startOfMonth, endOfMonth } from 'date-fns';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../../components/ui/card';
 import { useLocalization } from '../../hooks/useLocalization';
-import { ReportsData } from './useReportsData';
+import { ReportsData, Transaction, Disclosure } from './useReportsData';
 
 // Removed tax estimation logic
 
@@ -14,70 +14,70 @@ export function FinancialStatementsTab({ data }: { data: ReportsData }) {
   // ── Income Statement (YTD) ─────────────────────────────────────────────
   const ytd = useMemo(() => {
     const start = new Date(now.getFullYear(), 0, 1);
-    return transactions.filter(t => new Date(t.date) >= start);
+    return transactions.filter((t: Transaction) => new Date(t.date) >= start);
   }, [transactions]);
 
-  const ytdIncome = ytd.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
-  const ytdExpense = ytd.filter(t => t.type !== 'income').reduce((s, t) => s + Number(t.amount), 0);
+  const ytdIncome = ytd.filter((t: Transaction) => t.type === 'income').reduce((s: number, t: Transaction) => s + Number(t.amount), 0);
+  const ytdExpense = ytd.filter((t: Transaction) => t.type !== 'income').reduce((s: number, t: Transaction) => s + Number(t.amount), 0);
   const ytdNet = ytdIncome - ytdExpense;
   
-  const incomeByCategory = ytd.filter(t => t.type === 'income').reduce((acc, t) => {
-    const cat = data.categories.find(c => c.id === (t.category_id || t.categoryId))?.name || 'Other';
+  const incomeByCategory = ytd.filter((t: Transaction) => t.type === 'income').reduce((acc: Record<string, number>, t: Transaction) => {
+    const cat = data.categories.find(c => c.id === t.category_id)?.name || 'Other';
     acc[cat] = (acc[cat] || 0) + Number(t.amount);
     return acc;
   }, {} as Record<string, number>);
   const allIncomes = Object.entries(incomeByCategory).sort((a, b) => b[1] - a[1]);
 
-  const expenseByCategory = ytd.filter(t => t.type !== 'income').reduce((acc, t) => {
-    const cat = data.categories.find(c => c.id === (t.category_id || t.categoryId))?.name || 'Other';
+  const expenseByCategory = ytd.filter((t: Transaction) => t.type !== 'income').reduce((acc: Record<string, number>, t: Transaction) => {
+    const cat = data.categories.find(c => c.id === t.category_id)?.name || 'Other';
     acc[cat] = (acc[cat] || 0) + Number(t.amount);
     return acc;
   }, {} as Record<string, number>);
   const allExpenses = Object.entries(expenseByCategory).sort((a, b) => b[1] - a[1]);
 
   // ── Balance Sheet ──────────────────────────────────────────────────────
-  const assets = disclosures.filter(d => d.type === 'asset');
-  const liabilities = disclosures.filter(d => d.type === 'liability');
-  const totalAssets = assets.reduce((s, d) => s + Number(d.amount || 0), 0);
-  const totalLiabilities = liabilities.reduce((s, d) => s + Number(d.amount || 0), 0);
+  const assets = disclosures.filter((d: Disclosure) => d.type === 'asset');
+  const liabilities = disclosures.filter((d: Disclosure) => d.type === 'liability');
+  const totalAssets = assets.reduce((s: number, d: Disclosure) => s + Number(d.current_value ?? d.amount ?? 0), 0);
+  const totalLiabilities = liabilities.reduce((s: number, d: Disclosure) => s + Number(d.amount || 0), 0);
   const totalEquity = totalAssets - totalLiabilities;
 
   // Group by category
-  const assetGroups = assets.reduce((acc: Record<string, any[]>, d) => {
+  const assetGroups = assets.reduce((acc: Record<string, Disclosure[]>, d: Disclosure) => {
     const k = d.category || 'Other';
     if (!acc[k]) acc[k] = [];
     acc[k].push(d);
     return acc;
-  }, {});
-  const liabGroups = liabilities.reduce((acc: Record<string, any[]>, d) => {
+  }, {} as Record<string, Disclosure[]>);
+  const liabGroups = liabilities.reduce((acc: Record<string, Disclosure[]>, d: Disclosure) => {
     const k = d.category || 'Other';
     if (!acc[k]) acc[k] = [];
     acc[k].push(d);
     return acc;
-  }, {});
+  }, {} as Record<string, Disclosure[]>);
 
   // ── Expense-to-Income ──────────────────────────────────────────────────
   const monthStart = startOfMonth(now);
   const monthEnd = endOfMonth(now);
-  const monthlyIncome = transactions.filter(t => {
+  const monthlyIncome = transactions.filter((t: Transaction) => {
     const d = new Date(t.date);
     return t.type === 'income' && d >= monthStart && d <= monthEnd;
-  }).reduce((s, t) => s + Number(t.amount), 0);
+  }).reduce((s: number, t: Transaction) => s + Number(t.amount), 0);
 
-  const monthlyExpenseTotal = transactions.filter(t => {
+  const monthlyExpenseTotal = transactions.filter((t: Transaction) => {
     const d = new Date(t.date);
     return t.type === 'expense' && d >= monthStart && d <= monthEnd;
-  }).reduce((s, t) => s + Number(t.amount), 0);
+  }).reduce((s: number, t: Transaction) => s + Number(t.amount), 0);
 
   const etiRatio = monthlyIncome > 0 ? (monthlyExpenseTotal / monthlyIncome) * 100 : 0;
   const etiColor = etiRatio <= 50 ? 'text-green-700' : etiRatio <= 80 ? 'text-amber-700' : 'text-red-600';
   const etiBarColor = etiRatio <= 50 ? '#10b981' : etiRatio <= 80 ? '#f59e0b' : '#ef4444';
 
   // ── Investment Performance Ledger ──────────────────────────────────────
-  const investments = assets.filter(d =>
+  const investmentAssets = assets.filter((d: Disclosure) =>
     ['Investments', 'Retirement'].includes(d.category || '')
   );
-  const totalInvested = investments.reduce((s, d) => s + Number(d.amount || 0), 0);
+  const totalInvested = investmentAssets.reduce((s: number, d: Disclosure) => s + Number(d.current_value ?? d.amount ?? 0), 0);
   const investedPct = totalAssets > 0 ? (totalInvested / totalAssets * 100).toFixed(1) : '0.0';
 
   return (
@@ -206,7 +206,7 @@ export function FinancialStatementsTab({ data }: { data: ReportsData }) {
               <p className="text-xs font-medium text-muted-foreground mb-1">Credit Cards</p>
               {creditCards.map(c => (
                 <div key={c.id} className="flex justify-between text-sm py-0.5">
-                  <span>{c.name}</span><span className="text-muted-foreground">Due day {c.due_date || c.dueDate}</span>
+                  <span>{c.name}</span><span className="text-muted-foreground">Due day {c.due_date}</span>
                 </div>
               ))}
             </div>
@@ -241,13 +241,14 @@ export function FinancialStatementsTab({ data }: { data: ReportsData }) {
               </tr>
             </thead>
             <tbody>
-              {investments.map(inv => {
-                const allocPct = totalInvested > 0 ? (Number(inv.amount) / totalInvested * 100).toFixed(1) : '0.0';
+              {investmentAssets.map(inv => {
+                const val = Number(inv.current_value ?? inv.amount ?? 0);
+                const allocPct = totalInvested > 0 ? (val / totalInvested * 100).toFixed(1) : '0.0';
                 return (
                   <tr key={inv.id} className="border-b last:border-0 hover:bg-muted/40 transition-colors">
                     <td className="py-2 font-medium">{inv.name}</td>
                     <td className="py-2 text-muted-foreground">{inv.category}</td>
-                    <td className="py-2 text-right text-indigo-700 font-semibold">{formatCurrency(inv.amount)}</td>
+                    <td className="py-2 text-right text-indigo-700 font-semibold">{formatCurrency(val)}</td>
                     <td className="py-2 text-right">
                       <div className="flex items-center justify-end gap-2">
                         <div className="w-12 bg-slate-100 rounded-full h-1.5 overflow-hidden">
@@ -259,12 +260,12 @@ export function FinancialStatementsTab({ data }: { data: ReportsData }) {
                   </tr>
                 );
               })}
-              {investments.length === 0 && (
+              {investmentAssets.length === 0 && (
                 <tr><td colSpan={4} className="py-6 text-center text-muted-foreground">No investments or retirement assets in disclosures.</td></tr>
               )}
             </tbody>
           </table>
-          {investments.length > 0 && (
+          {investmentAssets.length > 0 && (
             <div className="border-t mt-2 pt-2 flex justify-between font-bold">
               <span>Total Portfolio</span><span className="text-indigo-700">{formatCurrency(totalInvested)}</span>
             </div>

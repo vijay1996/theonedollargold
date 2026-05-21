@@ -7,6 +7,7 @@ import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Label } from '../components/ui/label';
 import LoadingOverlay from '../components/ui/loading-overlay';
+import { UserProfile } from './reports/useReportsData';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -24,7 +25,7 @@ export default function Login() {
       if (isRegister) {
         const { data, error } = await db.auth.signUp({ email, password });
         if (error) throw error;
-        // create profile row if needed
+        // create profile row if needed, ensuring type consistency
         if (data?.user) {
           await db.from('users').upsert({ uid: data.user.id, email: data.user.email, name: email.split('@')[0], currency: 'USD', date_format: 'MM/dd/yyyy', locale: 'en-US', created_at: new Date().getTime(), updated_at: new Date().getTime() });
         }

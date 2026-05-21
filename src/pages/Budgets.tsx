@@ -12,12 +12,14 @@ import { handleFirestoreError, OperationType } from '../lib/firestoreAuthError';
 import { Trash2, Plus } from 'lucide-react';
 import LoadingOverlay from '../components/ui/loading-overlay';
 import { useLocalization } from '../hooks/useLocalization';
+import { Budget, Category, Transaction } from './reports/useReportsData';
+import { primaryButtonClass } from '../lib/constants';
 
 export default function Budgets() {
   const { formatCurrency } = useLocalization();
-  const [budgets, setBudgets] = useState<any[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
-  const [transactions, setTransactions] = useState<any[]>([]);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   
   const [open, setOpen] = useState(false);
   const [categoryId, setCategoryId] = useState('');
@@ -29,7 +31,7 @@ export default function Budgets() {
     let channel: any;
     const init = async () => {
       setLoading(true);
-      const user = auth.currentUser || await auth.getUser();
+      const user = auth.currentUser || (typeof (auth as any).getUser === 'function' ? await (auth as any).getUser() : null);
       if (!user) {
         setLoading(false);
         return;
@@ -70,14 +72,14 @@ export default function Budgets() {
     if (!categoryId || !limit || !auth.currentUser) return;
     setLoading(true);
     try {
-      const user = auth.currentUser || await auth.getUser();
+      const user = auth.currentUser || (typeof (auth as any).getUser === 'function' ? await (auth as any).getUser() : null);
       const id = uuidv4();
       const payload = { id, uid: user.uid, category_id: categoryId, limit_amount: parseFloat(limit), period, created_at: new Date().getTime(), updated_at: new Date().getTime() };
       const { error } = await db.from('budgets').upsert([payload], { onConflict: 'id' });
       if (error) throw error;
-      setBudgets(prev => {
+      setBudgets((prev: Budget[]) => {
         const list = (prev || []).filter(b => b.id !== id);
-        return [payload, ...list];
+        return [payload as Budget, ...list];
       });
       setOpen(false);
       setLimit('');
@@ -93,8 +95,9 @@ export default function Budgets() {
   const handleDelete = async (id: string) => {
     setLoading(true);
     try {
-      const user = auth.currentUser || await auth.getUser();
+      const user = auth.currentUser || (typeof (auth as any).getUser === 'function' ? await (auth as any).getUser() : null);
       await db.from('budgets').delete().eq('id', id).eq('uid', user.uid);
+      setBudgets(prev => (prev || []).filter(b => b.id !== id));
       toast.success('Budget deleted');
     } catch (err: any) {
       toast.error(err.message);
@@ -120,8 +123,8 @@ export default function Budgets() {
           <p className="text-muted-foreground">Track your spending limits by category.</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger render={<Button className="w-full sm:w-auto" />}>
-            <Plus className="h-4 w-4 mr-2" /> Add Budget
+          <DialogTrigger>
+            <Button className={`flex items-center ${primaryButtonClass}`}><Plus className="h-4 w-4 mr-2" /> Add Budget</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
@@ -130,7 +133,7 @@ export default function Budgets() {
             <form onSubmit={handleAdd} className="space-y-4 pt-4">
               <div className="space-y-2">
                 <label className="text-sm font-medium">Category</label>
-                <Select value={categoryId} onValueChange={setCategoryId} required>
+                <Select value={categoryId} onValueChange={v => setCategoryId(String(v))} required>
                   <SelectTrigger><SelectValue placeholder="Select category">{categoryId ? getCategoryName(categoryId) : undefined}</SelectValue></SelectTrigger>
                   <SelectContent>
                     {categories.filter(c => c.type === 'expense').map(c => (
@@ -145,7 +148,7 @@ export default function Budgets() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Period</label>
-                <Select value={period} onValueChange={setPeriod}>
+                <Select value={period} onValueChange={v => setPeriod(String(v))}>
                   <SelectTrigger><SelectValue placeholder="Select period">{period === 'yearly' ? 'Yearly' : 'Monthly'}</SelectValue></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="monthly">Monthly</SelectItem>
@@ -163,8 +166,8 @@ export default function Budgets() {
         {budgets.map(b => {
           // calculate spent
           const spent = transactions.filter(t => {
-            const tCategory = t.category_id || t.categoryId;
-            const bCategory = b.category_id || b.categoryId;
+            const tCategory = t.category_id;
+            const bCategory = b.category_id;
             if (tCategory !== bCategory || t.type !== 'expense') return false;
             const d = new Date(t.date);
             if (b.period === 'monthly') {
@@ -181,7 +184,7 @@ export default function Budgets() {
           return (
             <Card key={b.id}>
               <CardHeader className="flex flex-row items-center justify-between pb-2">
-                <CardTitle className="text-lg font-medium">{getCategoryName(b.category_id || b.categoryId)}</CardTitle>
+                <CardTitle className="text-lg font-medium">{getCategoryName(b.category_id)}</CardTitle>
                 <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => handleDelete(b.id)}>
                   <Trash2 className="h-4 w-4 text-red-500" />
                 </Button>

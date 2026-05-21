@@ -14,12 +14,23 @@ import { toast } from 'sonner';
 import { handleFirestoreError, OperationType } from '../lib/firestoreAuthError';
 import { Trash2, Plus, Edit } from 'lucide-react';
 import { format } from 'date-fns';
+import { Transaction, Category } from './reports/useReportsData';
+import { primaryButtonClass, secondaryButtonClass } from '../lib/constants';
  
+interface BulkTransactionRow {
+  id: string;
+  date: string;
+  type: 'income' | 'expense';
+  category_id: string;
+  amount: string;
+  comment: string;
+  isNew: boolean;
+}
 
 export default function Transactions() {
   const { formatCurrency, formatDate } = useLocalization();
-  const [transactions, setTransactions] = useState<any[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   
   const [open, setOpen] = useState(false);
   const [type, setType] = useState('expense');
@@ -41,14 +52,14 @@ export default function Transactions() {
   const [filterType, setFilterType] = useState('all');
   const [sortBy, setSortBy] = useState('date-desc');
   const [bulkOpen, setBulkOpen] = useState(false);
-  const [bulkRows, setBulkRows] = useState<Array<any>>([{ date: format(new Date(), 'yyyy-MM-dd'), type: 'expense', category_id: '', amount: '', comment: '' }]);
+  const [bulkRows, setBulkRows] = useState<BulkTransactionRow[]>([{ id: uuidv4(), date: format(new Date(), 'yyyy-MM-dd'), type: 'expense', category_id: '', amount: '', comment: '', isNew: false }]);
   const bulkRowsRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let channel: any;
     const init = async () => {
       setLoading(true);
-      const user = auth.currentUser || await auth.getUser();
+      const user = auth.currentUser || (typeof (auth as any).getUser === 'function' ? await (auth as any).getUser() : null);
       if (!user) {
         setLoading(false);
         return;
@@ -61,7 +72,7 @@ export default function Transactions() {
         if (catErr) throw catErr;
         if (transErr) throw transErr;
         setCategories(catData || []);
-        setTransactions((transData || []).sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        setTransactions((transData || []).sort((a: Transaction, b: Transaction) => new Date(b.date).getTime() - new Date(a.date).getTime()));
 
         const chanTopic = `public:transactions_categories_${user.uid}_${Date.now()}`;
         channel = db.channel(chanTopic)
@@ -69,7 +80,7 @@ export default function Transactions() {
             db.from('categories').select('*').eq('uid', user.uid).then(res => { if (!res.error) setCategories(res.data || []); });
           })
           .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `uid=eq.${user.uid}` }, () => {
-            db.from('transactions').select('*').eq('uid', user.uid).then(res => { if (!res.error) setTransactions((res.data || []).sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())); });
+            db.from('transactions').select('*').eq('uid', user.uid).then(res => { if (!res.error) setTransactions((res.data || []).sort((a: Transaction, b: Transaction) => new Date(b.date).getTime() - new Date(a.date).getTime())); });
           }).subscribe();
       } catch (err: any) {
         handleFirestoreError(err, OperationType.LIST, "users/" + user?.uid + "/transactions");
@@ -87,7 +98,7 @@ export default function Transactions() {
     setLoading(true);
     try {
       const id = uuidv4();
-      const user = auth.currentUser || await auth.getUser();
+      const user = auth.currentUser || (typeof (auth as any).getUser === 'function' ? await (auth as any).getUser() : null);
       const payload = {
         id,
         uid: user.uid,
@@ -102,9 +113,9 @@ export default function Transactions() {
       const { error } = await db.from('transactions').upsert([payload], { onConflict: 'id' });
       if (error) throw error;
       // optimistic UI update
-      setTransactions(prev => {
+      setTransactions((prev: Transaction[]) => {
         const list = (prev || []).filter(t => t.id !== id);
-        return [payload, ...list];
+        return [payload as Transaction, ...list];
       });
       setOpen(false);
       setAmount('');
@@ -121,8 +132,9 @@ export default function Transactions() {
   const handleDelete = async (id: string) => {
     setLoading(true);
     try {
-      const user = auth.currentUser || await auth.getUser();
+      const user = auth.currentUser || (typeof (auth as any).getUser === 'function' ? await (auth as any).getUser() : null);
       await db.from('transactions').delete().eq('id', id).eq('uid', user.uid);
+      setTransactions(prev => (prev || []).filter(t => t.id !== id));
       toast.success('Transaction deleted');
     } catch (err: any) {
       toast.error(err.message);
@@ -138,43 +150,78 @@ export default function Transactions() {
   return (
     <div className="space-y-6 relative">
       <LoadingOverlay show={loading || uploading || editLoading} label="Updating transactions" />
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-3xl font-bold tracking-tight">Transactions</h2>
-          <p className="text-muted-foreground">Log your daily income and expenses.</p>
-        </div>
-        <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:items-center">
-          <Button onClick={() => setOpen(true)} className="flex w-full items-center justify-center bg-indigo-600 text-white hover:bg-indigo-700 sm:w-auto">
+      <div className="flex items-center gap-4">
+        <h2 className="text-3xl font-bold tracking-tight">Transactions</h2>
+        <p className="text-muted-foreground">Log your daily income and expenses.</p>
+      </div>
+
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b">
+          <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
+            <Input 
+              placeholder="Search comments..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full sm:w-[200px]"
+            />
+            <div className="grid grid-cols-2 gap-2 sm:flex">
+              <Select value={filterType} onValueChange={v => setFilterType(String(v))}>
+                <SelectTrigger className="w-full sm:w-[120px]">
+                  <SelectValue placeholder="Filter">
+                    {filterType === 'all' ? 'All Types' : filterType === 'income' ? 'Income' : 'Expense'}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="expense">Expense</SelectItem>
+                  <SelectItem value="income">Income</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={sortBy} onValueChange={v => setSortBy(String(v))}>
+                <SelectTrigger className="w-full sm:w-[150px]">
+                  <SelectValue placeholder="Sort">
+                    {sortBy === 'date-desc' ? 'Newest' : sortBy === 'date-asc' ? 'Oldest' : sortBy === 'amount-desc' ? 'Highest' : 'Lowest'}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="date-desc">Date (Newest)</SelectItem>
+                  <SelectItem value="date-asc">Date (Oldest)</SelectItem>
+                  <SelectItem value="amount-desc">Amount (Highest)</SelectItem>
+                  <SelectItem value="amount-asc">Amount (Lowest)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto sm:items-center">
+          <Button onClick={() => setOpen(true)} className={`flex items-center ${primaryButtonClass}`}>
             <Plus className="h-4 w-4 mr-2" /> Add Transaction
           </Button>
-          <Button onClick={() => setBulkOpen(true)} className="flex w-full items-center justify-center bg-emerald-600 text-white hover:bg-emerald-700 sm:w-auto">
+          <Button onClick={() => setBulkOpen(true)} className={`flex items-center ${secondaryButtonClass}`}>
             <Plus className="h-4 w-4 mr-2" /> Bulk Add
           </Button>
-        </div>
+
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Add Transaction</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleAdd} className="space-y-4 pt-4">
-              <div className="space-y-2">
+              <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">Type</label>
-                <Select value={type} onValueChange={(val) => { setType(val); setCategoryId(''); }}>
-                  <SelectTrigger><SelectValue placeholder="Select type">{type === 'income' ? 'Income' : 'Expense'}</SelectValue></SelectTrigger>
+                <Select value={type} onValueChange={(val) => { setType(String(val)); setCategoryId(''); }}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Select type">{type === 'income' ? 'Income' : 'Expense'}</SelectValue></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="expense">Expense</SelectItem>
                     <SelectItem value="income">Income</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
+              <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">Date</label>
                 <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
               </div>
-              <div className="space-y-2">
+              <div className="flex flex-col gap-1.5">
                 <label className="text-sm font-medium">Category</label>
-                <Select value={categoryId} onValueChange={setCategoryId} required>
-                  <SelectTrigger><SelectValue placeholder="Select category">{categoryId ? getCategoryName(categoryId) : undefined}</SelectValue></SelectTrigger>
+                <Select value={categoryId} onValueChange={(val) => setCategoryId(String(val))} required>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Select category">{categoryId ? getCategoryName(categoryId) : undefined}</SelectValue></SelectTrigger>
                   <SelectContent>
                     {filteredCategories.map(c => (
                       <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
@@ -204,7 +251,7 @@ export default function Transactions() {
             <form onSubmit={async (e) => { e.preventDefault(); await handleBulkSave(); }} className="flex min-h-0 flex-col gap-4 pt-2">
               <div ref={bulkRowsRef} className="min-h-0 space-y-3 overflow-y-auto pr-1">
                 {bulkRows.map((r, idx) => (
-                  <div key={idx} className="rounded-lg border bg-card p-3">
+                  <div key={r.id} className={`rounded-lg border bg-card p-3 transition-all duration-300 ${r.isNew ? 'animate-row-highlight' : ''}`}>
                     <div className="mb-3 flex items-center justify-between gap-3 lg:hidden">
                       <div className="text-sm font-medium">Transaction {idx + 1}</div>
                       <Button type="button" variant="ghost" size="icon" onClick={() => removeBulkRow(idx)} aria-label="Remove row">
@@ -212,11 +259,11 @@ export default function Transactions() {
                       </Button>
                     </div>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:items-end lg:grid-cols-[150px_130px_190px_130px_minmax(180px,1fr)_40px]">
-                      <div className="space-y-1.5">
+                      <div className="flex flex-col gap-1.5">
                         <label className="text-xs font-medium text-muted-foreground">Date</label>
                         <Input className="w-full" type="date" value={r.date} onChange={(e) => updateBulkRow(idx, 'date', e.target.value)} required />
                       </div>
-                      <div className="space-y-1.5">
+                      <div className="flex flex-col gap-1.5">
                         <label className="text-xs font-medium text-muted-foreground">Type</label>
                         <Select value={r.type} onValueChange={(val) => updateBulkRow(idx, 'type', val)}>
                           <SelectTrigger className="w-full"><SelectValue>{r.type === 'income' ? 'Income' : 'Expense'}</SelectValue></SelectTrigger>
@@ -226,7 +273,7 @@ export default function Transactions() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-1.5">
+                      <div className="flex flex-col gap-1.5">
                         <label className="text-xs font-medium text-muted-foreground">Category</label>
                         <Select value={r.category_id} onValueChange={(val) => updateBulkRow(idx, 'category_id', val)}>
                           <SelectTrigger className="w-full"><SelectValue>{r.category_id ? getCategoryName(r.category_id) : 'Select'}</SelectValue></SelectTrigger>
@@ -237,11 +284,11 @@ export default function Transactions() {
                           </SelectContent>
                         </Select>
                       </div>
-                      <div className="space-y-1.5">
+                      <div className="flex flex-col gap-1.5">
                         <label className="text-xs font-medium text-muted-foreground">Amount</label>
                         <Input className="w-full" type="number" step="0.01" value={r.amount} onChange={(e) => updateBulkRow(idx, 'amount', e.target.value)} required placeholder="0.00" />
                       </div>
-                      <div className="space-y-1.5 sm:col-span-2 lg:col-span-1">
+                      <div className="flex flex-col gap-1.5 sm:col-span-2 lg:col-span-1">
                         <label className="text-xs font-medium text-muted-foreground">Comment</label>
                         <Input className="w-full" value={r.comment} onChange={(e) => updateBulkRow(idx, 'comment', e.target.value)} placeholder="Optional" />
                       </div>
@@ -262,48 +309,11 @@ export default function Transactions() {
             </form>
           </DialogContent>
         </Dialog>
-      </div>
-
-        {/* Upload/AI preview removed — bulk add and manual entry supported */}
+        </div>
+          </div>
+      </CardHeader>
 
       <Card>
-        <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b">
-          <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
-            <Input 
-              placeholder="Search comments..." 
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full sm:w-[200px]"
-            />
-            <div className="grid grid-cols-2 gap-2 sm:flex">
-              <Select value={filterType} onValueChange={setFilterType}>
-                <SelectTrigger className="w-full sm:w-[120px]">
-                  <SelectValue placeholder="Filter">
-                    {filterType === 'all' ? 'All Types' : filterType === 'income' ? 'Income' : 'Expense'}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="expense">Expense</SelectItem>
-                  <SelectItem value="income">Income</SelectItem>
-                </SelectContent>
-              </Select>
-              <Select value={sortBy} onValueChange={setSortBy}>
-                <SelectTrigger className="w-full sm:w-[150px]">
-                  <SelectValue placeholder="Sort">
-                    {sortBy === 'date-desc' ? 'Newest' : sortBy === 'date-asc' ? 'Oldest' : sortBy === 'amount-desc' ? 'Highest' : 'Lowest'}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="date-desc">Date (Newest)</SelectItem>
-                  <SelectItem value="date-asc">Date (Oldest)</SelectItem>
-                  <SelectItem value="amount-desc">Amount (Highest)</SelectItem>
-                  <SelectItem value="amount-asc">Amount (Lowest)</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-        </CardHeader>
         <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
@@ -331,7 +341,7 @@ export default function Transactions() {
               }).map((t) => (
                 <TableRow key={t.id}>
                   <TableCell className="whitespace-nowrap">{formatDate(t.date)}</TableCell>
-                  <TableCell>{getCategoryName(t.category_id || t.categoryId)}</TableCell>
+                  <TableCell>{getCategoryName(t.category_id || '')}</TableCell>
                   <TableCell className="text-muted-foreground max-w-[200px] truncate" title={t.comment}>{t.comment}</TableCell>
                   <TableCell className={t.type === 'income' ? 'text-right font-medium text-green-600 whitespace-nowrap' : 'text-right font-medium text-red-600 whitespace-nowrap'}>
                     {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
@@ -369,24 +379,24 @@ export default function Transactions() {
             <DialogTitle>Edit Transaction</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleUpdate} className="space-y-4 pt-2">
-            <div className="space-y-2">
+            <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">Type</label>
-              <Select value={editType} onValueChange={(val) => { setEditType(val); setEditCategoryId(''); }}>
-                <SelectTrigger><SelectValue>{editType === 'income' ? 'Income' : 'Expense'}</SelectValue></SelectTrigger>
+              <Select value={editType} onValueChange={(val) => { setEditType(String(val)); setEditCategoryId(''); }}>
+                <SelectTrigger className="w-full"><SelectValue>{editType === 'income' ? 'Income' : 'Expense'}</SelectValue></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="expense">Expense</SelectItem>
                   <SelectItem value="income">Income</SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">Date</label>
               <Input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} required />
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">Category</label>
-              <Select value={editCategoryId} onValueChange={setEditCategoryId} required>
-                <SelectTrigger><SelectValue>{editCategoryId ? getCategoryName(editCategoryId) : undefined}</SelectValue></SelectTrigger>
+              <Select value={editCategoryId} onValueChange={v => setEditCategoryId(String(v))} required>
+                <SelectTrigger className="w-full"><SelectValue>{editCategoryId ? getCategoryName(editCategoryId) : undefined}</SelectValue></SelectTrigger>
                 <SelectContent>
                   {categories.filter(c => c.type === editType).map(c => (
                     <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
@@ -394,11 +404,11 @@ export default function Transactions() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">Amount</label>
               <Input type="number" step="0.01" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} required placeholder="0.00" />
             </div>
-            <div className="space-y-2">
+            <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium">Comment</label>
               <Input value={editComment} onChange={(e) => setEditComment(e.target.value)} placeholder="Optional comment" />
             </div>
@@ -409,7 +419,7 @@ export default function Transactions() {
     </div>
   );
 
-  async function openEdit(tx: any) {
+  async function openEdit(tx: Transaction) {
     setEditId(tx.id);
     setEditType(tx.type || 'expense');
     setEditAmount(String(tx.amount || ''));
@@ -418,7 +428,7 @@ export default function Transactions() {
     } catch (e) {
       setEditDate(format(new Date(), 'yyyy-MM-dd'));
     }
-    setEditCategoryId(tx.category_id || tx.categoryId || '');
+    setEditCategoryId(tx.category_id || '');
     setEditComment(tx.comment || '');
     setEditOpen(true);
   }
@@ -428,7 +438,7 @@ export default function Transactions() {
     if (!editId || !editAmount || !editCategoryId || !editDate) return;
     setEditLoading(true);
     try {
-      const user = auth.currentUser || await auth.getUser();
+      const user = auth.currentUser || (typeof (auth as any).getUser === 'function' ? await (auth as any).getUser() : null);
       const payload = {
         date: editDate,
         category_id: editCategoryId,
@@ -439,7 +449,7 @@ export default function Transactions() {
       };
       const { error } = await db.from('transactions').update(payload).eq('id', editId).eq('uid', user.uid);
       if (error) throw error;
-      setTransactions(prev => (prev || []).map(t => t.id === editId ? { ...t, ...payload } : t));
+      setTransactions(prev => (prev || []).map(t => t.id === editId ? { ...t, ...payload } as Transaction : t));
       setEditOpen(false);
       toast.success('Transaction updated');
     } catch (err: any) {
@@ -450,16 +460,16 @@ export default function Transactions() {
     }
   }
 
-  function updateBulkRow(index: number, field: string, value: any) {
+  function updateBulkRow(index: number, field: keyof BulkTransactionRow, value: any) {
     setBulkRows(prev => {
       const copy = [...prev];
-      copy[index] = { ...copy[index], [field]: value };
+      copy[index] = { ...copy[index], [field]: value } as BulkTransactionRow;
       return copy;
     });
   }
 
   function addBulkRow() {
-    setBulkRows(prev => ([{ date: format(new Date(), 'yyyy-MM-dd'), type: 'expense', category_id: '', amount: '', comment: '' }, ...prev]));
+    setBulkRows(prev => ([{ id: uuidv4(), date: format(new Date(), 'yyyy-MM-dd'), type: 'expense', category_id: '', amount: '', comment: '', isNew: true }, ...prev]));
     requestAnimationFrame(() => {
       bulkRowsRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     });
@@ -473,12 +483,12 @@ export default function Transactions() {
     if (!bulkRows || bulkRows.length === 0) return;
     setUploading(true);
     try {
-      const user = auth.currentUser || await auth.getUser();
+      const user = auth.currentUser || (typeof (auth as any).getUser === 'function' ? await (auth as any).getUser() : null);
       const toInsert = bulkRows.map(r => ({
         id: uuidv4(),
         uid: user.uid,
         date: r.date || new Date().toISOString().slice(0,10),
-        category_id: r.category_id || null,
+        category_id: r.category_id || undefined,
         amount: Math.abs(parseFloat(String(r.amount || '0'))),
         type: r.type || 'expense',
         comment: r.comment || '',
@@ -488,9 +498,9 @@ export default function Transactions() {
 
       const { error } = await db.from('transactions').insert(toInsert);
       if (error) throw error;
-      setTransactions(prev => [...toInsert, ...(prev || [])]);
+      setTransactions(prev => [...(toInsert as unknown as Transaction[]), ...(prev || [])]);
       setBulkOpen(false);
-      setBulkRows([{ date: format(new Date(), 'yyyy-MM-dd'), type: 'expense', category_id: '', amount: '', comment: '' }]);
+      setBulkRows([{ id: uuidv4(), date: format(new Date(), 'yyyy-MM-dd'), type: 'expense', category_id: '', amount: '', comment: '', isNew: false }]);
       toast.success('Imported ' + toInsert.length + ' transactions');
     } catch (err: any) {
       toast.error(err.message || 'Bulk import failed');

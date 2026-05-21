@@ -12,11 +12,13 @@ import { handleFirestoreError, OperationType } from '../lib/firestoreAuthError';
 import { Trash2, Plus } from 'lucide-react';
 import LoadingOverlay from '../components/ui/loading-overlay';
 import { useLocalization } from '../hooks/useLocalization';
+import { Subscription, Category } from './reports/useReportsData';
+import { primaryButtonClass } from '../lib/constants';
 
 export default function Subscriptions() {
   const { formatCurrency } = useLocalization();
-  const [subscriptions, setSubscriptions] = useState<any[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
@@ -31,7 +33,7 @@ export default function Subscriptions() {
     let channel: any;
     const init = async () => {
       setLoading(true);
-      const user = auth.currentUser || await auth.getUser();
+      const user = auth.currentUser || (typeof (auth as any).getUser === 'function' ? await (auth as any).getUser() : null);
       if (!user) {
         setLoading(false);
         return;
@@ -70,7 +72,7 @@ export default function Subscriptions() {
     setLoading(true);
     try {
       const id = uuidv4();
-      const user = auth.currentUser || await auth.getUser();
+      const user = auth.currentUser || (typeof (auth as any).getUser === 'function' ? await (auth as any).getUser() : null);
       const payload = {
         id,
         uid: user.uid,
@@ -85,9 +87,9 @@ export default function Subscriptions() {
       };
       const { error } = await db.from('subscriptions').upsert([payload], { onConflict: 'id' });
       if (error) throw error;
-      setSubscriptions(prev => {
+      setSubscriptions((prev: Subscription[]) => {
         const list = (prev || []).filter(s => s.id !== id);
-        return [payload, ...list];
+        return [payload as Subscription, ...list];
       });
       // If deduction day is today, create an immediate transaction
       try {
@@ -129,8 +131,9 @@ export default function Subscriptions() {
   const handleDelete = async (id: string) => {
     setLoading(true);
     try {
-      const user = auth.currentUser || await auth.getUser();
+      const user = auth.currentUser || (typeof (auth as any).getUser === 'function' ? await (auth as any).getUser() : null);
       await db.from('subscriptions').delete().eq('id', id).eq('uid', user.uid);
+      setSubscriptions(prev => (prev || []).filter(s => s.id !== id));
       toast.success('Subscription deleted');
     } catch (err: any) {
       toast.error(err.message);
@@ -151,8 +154,8 @@ export default function Subscriptions() {
           <p className="text-muted-foreground">Manage your recurring payments.</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger render={<Button className="w-full sm:w-auto" />}>
-            <Plus className="h-4 w-4 mr-2" /> Add Subscription
+          <DialogTrigger>
+            <Button className={`flex items-center ${primaryButtonClass}`}><Plus className="h-4 w-4 mr-2" /> Add Subscription</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
@@ -169,7 +172,7 @@ export default function Subscriptions() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Category</label>
-                <Select value={categoryId} onValueChange={setCategoryId} required>
+                <Select value={categoryId} onValueChange={v => setCategoryId(String(v))} required>
                   <SelectTrigger><SelectValue placeholder="Select category">{categoryId ? getCategoryName(categoryId) : undefined}</SelectValue></SelectTrigger>
                   <SelectContent>
                     {categories.filter(c => c.type === 'expense').map(c => (
@@ -180,7 +183,7 @@ export default function Subscriptions() {
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Frequency</label>
-                <Select value={frequency} onValueChange={setFrequency}>
+                <Select value={frequency} onValueChange={v => setFrequency(String(v))}>
                   <SelectTrigger><SelectValue placeholder="Select frequency">{frequency === 'yearly' ? 'Yearly' : 'Monthly'}</SelectValue></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="monthly">Monthly</SelectItem>
@@ -191,7 +194,7 @@ export default function Subscriptions() {
               {frequency === 'yearly' && (
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Deduction Month</label>
-                  <Select value={deductionMonth} onValueChange={setDeductionMonth}>
+                  <Select value={deductionMonth} onValueChange={v => setDeductionMonth(String(v))}>
                     <SelectTrigger><SelectValue placeholder="Select month" /></SelectTrigger>
                     <SelectContent>
                       {Array.from({length: 12}).map((_, i) => (
@@ -222,8 +225,8 @@ export default function Subscriptions() {
             </CardHeader>
             <CardContent>
               <div className="break-words text-2xl font-bold tracking-tight mb-2">{formatCurrency(s.amount)}</div>
-              <p className="text-sm text-muted-foreground">{s.frequency} on day {s.deduction_date || s.deductionDate}</p>
-              <p className="text-xs text-muted-foreground mt-1">Category: {getCategoryName(s.category_id || s.categoryId)}</p>
+              <p className="text-sm text-muted-foreground">{s.frequency} on day {s.deduction_date}</p>
+              <p className="text-xs text-muted-foreground mt-1">Category: {getCategoryName(s.category_id)}</p>
             </CardContent>
           </Card>
         ))}

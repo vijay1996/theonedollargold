@@ -17,8 +17,8 @@ export function BudgetsTab({ data }: { data: ReportsData }) {
   // Budget utilization with spent/remaining
   const budgetRows = useMemo(() => budgets.map(b => {
     const spent = transactions.filter(t => {
-      const cid = t.category_id || t.categoryId;
-      const bid = b.category_id || b.categoryId;
+      const cid = t.category_id;
+      const bid = b.category_id;
       if (cid !== bid || t.type !== 'expense') return false;
       const d = new Date(t.date);
       if (b.period === 'monthly') return d >= monthStart && d <= monthEnd;
@@ -27,14 +27,14 @@ export function BudgetsTab({ data }: { data: ReportsData }) {
     const limit = Number(b.limit_amount || 0);
     const pct = limit > 0 ? Math.min(100, (spent / limit) * 100) : 0;
     const remaining = Math.max(0, limit - spent);
-    return { name: getCatName(b.category_id || b.categoryId), spent, limit, pct, remaining, period: b.period };
+    return { name: getCatName(b.category_id), spent, limit, pct, remaining, period: b.period };
   }), [budgets, transactions]);
 
   // Category allocation matrix
   const catMatrix = useMemo(() => {
     const expenseByCategory: Record<string, { income: number; expense: number }> = {};
     transactions.forEach(t => {
-      const name = getCatName(t.category_id || t.categoryId);
+      const name = getCatName(t.category_id as string);
       if (!expenseByCategory[name]) expenseByCategory[name] = { income: 0, expense: 0 };
       if (t.type === 'income') expenseByCategory[name].income += Number(t.amount);
       else expenseByCategory[name].expense += Number(t.amount);

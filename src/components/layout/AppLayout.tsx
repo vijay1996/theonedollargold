@@ -19,16 +19,35 @@ export function AppLayout() {
     navigate('/login');
   };
 
-  const navLinks = [
-    { name: 'Dashboard', path: '/finance/dashboard', icon: LayoutDashboard },
-    { name: 'Reports', path: '/finance/reports', icon: BarChart2 },
-    { name: 'Transactions', path: '/finance/transactions', icon: RefreshCw },
-    { name: 'Budgets', path: '/finance/budgets', icon: PieChart },
-    { name: 'Assets & Liabilities', path: '/finance/assets', icon: Wallet },
-    { name: 'Investments', path: '/finance/investments', icon: TrendingUp },
-    { name: 'Categories', path: '/finance/categories', icon: Layers },
-    { name: 'Subscriptions', path: '/finance/subscriptions', icon: RefreshCw },
-    { name: 'Credit Cards', path: '/finance/cards', icon: CreditCard },
+  const navGroups = [
+    {
+      title: 'Overview',
+      links: [
+        { name: 'Dashboard', path: '/finance/dashboard', icon: LayoutDashboard },
+        { name: 'Reports', path: '/finance/reports', icon: BarChart2 },
+      ]
+    },
+    {
+      title: 'Cash Flow',
+      links: [
+        { name: 'Categories', path: '/finance/categories', icon: Layers },
+        { name: 'Budgets', path: '/finance/budgets', icon: PieChart },
+        { name: 'Transactions', path: '/finance/transactions', icon: RefreshCw },
+      ]
+    },
+    {
+      title: 'Wealth',
+      links: [
+        { name: 'Assets & Liabilities', path: '/finance/assets', icon: Wallet },
+      ]
+    },
+    {
+      title: 'Commitments',
+      links: [
+        { name: 'Subscriptions', path: '/finance/subscriptions', icon: RefreshCw },
+        { name: 'Credit Cards', path: '/finance/cards', icon: CreditCard },
+      ]
+    }
   ];
 
   const SidebarContent = ({ onNavigate }: { onNavigate?: () => void }) => (
@@ -37,33 +56,42 @@ export function AppLayout() {
         <Wallet className="h-6 w-6 text-indigo-400" />
         <span>OneDollarGold</span>
       </div>
-      <nav className="flex-1 py-4 space-y-1">
+      <nav className="flex-1 py-4 overflow-y-auto">
         <Link 
           to="/" 
           onClick={onNavigate}
-          className="flex items-center gap-3 px-4 py-2 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors text-sm mb-4"
+          className="flex items-center gap-3 px-4 py-2 hover:bg-slate-800 text-slate-400 hover:text-white transition-colors text-sm mb-6"
         >
           <ExternalLink className="h-4 w-4" /> Back to Main Site
         </Link>
-        <div className="px-4 pb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-          Finance App
+        
+        <div className="space-y-6">
+          {navGroups.map((group) => (
+            <div key={group.title}>
+              <div className="px-4 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                {group.title}
+              </div>
+              <div className="space-y-1">
+                {group.links.map((link) => {
+                  const Icon = link.icon;
+                  const isActive = location.pathname === link.path;
+                  return (
+                    <Link
+                      key={link.name}
+                      to={link.path}
+                      onClick={onNavigate}
+                      className={`flex items-center gap-3 px-4 py-2 transition-colors ${
+                        isActive ? 'bg-indigo-500/10 text-indigo-400 border-r-2 border-indigo-500' : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                      }`}
+                    >
+                      <Icon className="h-5 w-5" /> {link.name}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
-        {navLinks.map((link) => {
-          const Icon = link.icon;
-          const isActive = location.pathname === link.path;
-          return (
-            <Link
-              key={link.name}
-              to={link.path}
-              onClick={onNavigate}
-              className={`flex items-center gap-3 px-4 py-2 transition-colors ${
-                isActive ? 'bg-slate-800 text-white' : 'hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <Icon className="h-5 w-5" /> {link.name}
-            </Link>
-          );
-        })}
       </nav>
       <div className="p-4 border-t border-slate-800 space-y-1">
         <Link to="/finance/profile" onClick={onNavigate} className={`flex items-center gap-3 px-4 py-2 transition-colors font-medium ${location.pathname === '/finance/profile' ? 'bg-slate-800 text-white' : 'hover:bg-slate-800 hover:text-white'}`}>

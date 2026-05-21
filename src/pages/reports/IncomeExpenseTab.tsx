@@ -17,19 +17,19 @@ export function IncomeExpenseTab({ data, from, to }: { data: ReportsData; from: 
   }), [data.transactions, from, to]);
 
   const getCatName = (id: string) => data.categories.find(c => c.id === id)?.name || 'Other';
+  const getSafeCatName = (id?: string) => id ? getCatName(id) : 'Other';
 
   // Monthly stacked bar data — build from the actual date range
   const monthlyData = useMemo(() => {
     const months = eachMonthOfInterval({ start: from, end: to });
-    const map: Record<string, any> = {};
+    const map: Record<string, { name: string; income: number; expense: number; net: number }> = {};
     months.forEach(d => { const key = format(d, 'MMM yy'); map[key] = { name: key, income: 0, expense: 0, net: 0 }; });
     filtered.forEach(t => {
       const key = format(new Date(t.date), 'MMM yy');
-      if (!map[key]) return;
       if (t.type === 'income') map[key].income += Number(t.amount);
       else map[key].expense += Number(t.amount);
     });
-    return Object.values(map).map((m: any) => ({ ...m, net: m.income - m.expense }));
+    return Object.values(map).map(m => ({ ...m, net: m.income - m.expense }));
   }, [filtered, from, to]);
 
   // Cumulative area chart
@@ -45,7 +45,7 @@ export function IncomeExpenseTab({ data, from, to }: { data: ReportsData; from: 
   const catPie = useMemo(() => {
     const map: Record<string, number> = {};
     filtered.filter(t => t.type !== 'income').forEach(t => {
-      const n = getCatName(t.category_id || t.categoryId);
+      const n = getSafeCatName(t.category_id);
       map[n] = (map[n] || 0) + Number(t.amount);
     });
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
@@ -69,7 +69,7 @@ export function IncomeExpenseTab({ data, from, to }: { data: ReportsData; from: 
       {/* Stacked Bar Chart */}
       <Card>
         <CardHeader>
-          <CardTitle>Stacked Monthly Cash Flow</CardTitle>
+          <CardTitle>Cash Flow</CardTitle>
           <CardDescription>Income and expenses stacked per month</CardDescription>
         </CardHeader>
         <CardContent>
@@ -78,7 +78,7 @@ export function IncomeExpenseTab({ data, from, to }: { data: ReportsData; from: 
               <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
               <XAxis dataKey="name" tick={{ fontSize: 11 }} />
               <YAxis tickFormatter={cfmt} tick={{ fontSize: 10 }} width={72} />
-              <Tooltip formatter={cfmt} />
+              <Tooltip formatter={v => formatCurrency(Number(v))} />
               <Legend />
               <Bar dataKey="income" name="Income" stackId="a" fill="#10b981" radius={[0,0,0,0]} />
               <Bar dataKey="expense" name="Expense" stackId="b" fill="#ef4444" radius={[4,4,0,0]} />
@@ -104,7 +104,7 @@ export function IncomeExpenseTab({ data, from, to }: { data: ReportsData; from: 
                 <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
                 <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                 <YAxis tickFormatter={cfmt} tick={{ fontSize: 10 }} width={72} />
-                <Tooltip formatter={cfmt} />
+                <Tooltip formatter={v => formatCurrency(Number(v))} />
                 <Legend />
                 <Area type="monotone" dataKey="income" name="Income" stroke="#10b981" fill="url(#gi)" strokeWidth={2} />
                 <Area type="monotone" dataKey="expense" name="Expense" stroke="#ef4444" fill="url(#ge)" strokeWidth={2} />
@@ -126,7 +126,7 @@ export function IncomeExpenseTab({ data, from, to }: { data: ReportsData; from: 
                   <Pie data={catPie} cx="50%" cy="50%" innerRadius={45} outerRadius={80} paddingAngle={2} dataKey="value">
                     {catPie.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
-                  <Tooltip formatter={cfmt} />
+                  <Tooltip formatter={v => formatCurrency(Number(v))} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="flex-1 space-y-1 min-w-0">
@@ -145,28 +145,6 @@ export function IncomeExpenseTab({ data, from, to }: { data: ReportsData; from: 
         </Card>
       </div>
 
-      {/* Waterfall Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Monthly Net Cash Flow (Waterfall)</CardTitle>
-          <CardDescription>Green = positive month, Red = negative month</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={waterfallData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis tickFormatter={cfmt} tick={{ fontSize: 10 }} width={72} />
-              <Tooltip formatter={(v, n, p) => [cfmt(p.payload.net), 'Net']} />
-              <Bar dataKey="base" stackId="w" fill="transparent" legendType="none" />
-              {waterfallData.map((entry, i) => (
-                <Bar key={i} dataKey="value" stackId="w" fill={entry.fill} radius={[4,4,0,0]} />
-              ))}
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
       {/* Line chart - net savings trend */}
       <Card>
         <CardHeader>
@@ -179,7 +157,7 @@ export function IncomeExpenseTab({ data, from, to }: { data: ReportsData; from: 
               <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
               <XAxis dataKey="name" tick={{ fontSize: 11 }} />
               <YAxis tickFormatter={cfmt} tick={{ fontSize: 10 }} width={72} />
-              <Tooltip formatter={cfmt} />
+              <Tooltip formatter={v => formatCurrency(Number(v))} />
               <Line type="monotone" dataKey="net" name="Net" stroke="#6366f1" strokeWidth={2} dot={{ r: 4 }} activeDot={{ r: 6 }} />
             </LineChart>
           </ResponsiveContainer>

@@ -188,3 +188,20 @@
     transform: translateY(-2px) scale(1.03);
   }
 }
+
+@keyframes row-highlight {
+  0% {
+    background-color: rgba(99, 102, 241, 0.15);
+    border-color: rgb(99 102 241);
+    box-shadow: 0 0 12px rgba(99, 102, 241, 0.25);
+  }
+  100% {
+    background-color: var(--card);
+    border-color: var(--border);
+    box-shadow: none;
+  }
+}
+
+.animate-row-highlight {
+  animation: row-highlight 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}

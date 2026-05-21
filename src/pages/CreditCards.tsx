@@ -10,9 +10,11 @@ import { toast } from 'sonner';
 import { handleFirestoreError, OperationType } from '../lib/firestoreAuthError';
 import { Trash2, Plus } from 'lucide-react';
 import LoadingOverlay from '../components/ui/loading-overlay';
+import { CreditCard } from './reports/useReportsData';
+import { primaryButtonClass } from '../lib/constants';
 
 export default function CreditCards() {
-  const [cards, setCards] = useState<any[]>([]);
+  const [cards, setCards] = useState<CreditCard[]>([]);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -22,7 +24,7 @@ export default function CreditCards() {
     let channel: any;
     const init = async () => {
       setLoading(true);
-      const user = auth.currentUser || await auth.getUser();
+      const user = auth.currentUser || (typeof (auth as any).getUser === 'function' ? await (auth as any).getUser() : null);
       if (!user) {
         setLoading(false);
         return;
@@ -50,14 +52,14 @@ export default function CreditCards() {
     if (!name || !dueDate || !auth.currentUser) return;
     setLoading(true);
     try {
-      const user = auth.currentUser || await auth.getUser();
+      const user = auth.currentUser || (typeof (auth as any).getUser === 'function' ? await (auth as any).getUser() : null);
       const id = uuidv4();
       const payload = { id, uid: user.uid, name, due_date: parseInt(dueDate, 10), created_at: new Date().getTime(), updated_at: new Date().getTime() };
       const { error } = await db.from('credit_cards').upsert([payload], { onConflict: 'id' });
       if (error) throw error;
-      setCards(prev => {
+      setCards((prev: CreditCard[]) => {
         const list = (prev || []).filter(c => c.id !== id);
-        return [payload, ...list];
+        return [payload as CreditCard, ...list];
       });
       setOpen(false);
       setName('');
@@ -74,8 +76,9 @@ export default function CreditCards() {
   const handleDelete = async (id: string) => {
     setLoading(true);
     try {
-      const user = auth.currentUser || await auth.getUser();
+      const user = auth.currentUser || (typeof (auth as any).getUser === 'function' ? await (auth as any).getUser() : null);
       await db.from('credit_cards').delete().eq('id', id).eq('uid', user.uid);
+      setCards(prev => (prev || []).filter(c => c.id !== id));
       toast.success('Credit Card deleted');
     } catch (err: any) {
       toast.error(err.message);
@@ -94,8 +97,8 @@ export default function CreditCards() {
           <p className="text-muted-foreground">Manage credit cards and due dates.</p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger render={<Button className="w-full sm:w-auto" />}>
-            <Plus className="h-4 w-4 mr-2" /> Add Card
+          <DialogTrigger>
+            <Button className={`flex items-center ${primaryButtonClass}`}><Plus className="h-4 w-4 mr-2" /> Add Card</Button>
           </DialogTrigger>
           <DialogContent>
             <DialogHeader>
@@ -126,7 +129,7 @@ export default function CreditCards() {
               </Button>
             </CardHeader>
             <CardContent>
-                <p className="break-words text-xl font-bold sm:text-2xl">Due on the { (c.due_date || c.dueDate) }{(c.due_date || c.dueDate) === 1 ? 'st' : (c.due_date || c.dueDate) === 2 ? 'nd' : (c.due_date || c.dueDate) === 3 ? 'rd' : 'th'}</p>
+                <p className="break-words text-xl font-bold sm:text-2xl">Due on the { c.due_date }{c.due_date === 1 ? 'st' : c.due_date === 2 ? 'nd' : c.due_date === 3 ? 'rd' : 'th'}</p>
             </CardContent>
           </Card>
         ))}

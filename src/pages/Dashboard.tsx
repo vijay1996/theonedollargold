@@ -2,28 +2,35 @@ import { useState, useEffect } from 'react';
 import { auth, db } from '../lib/firebase';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
-import { /* charts removed */ } from 'recharts';
 import { format, subMonths } from 'date-fns';
 import { handleFirestoreError, OperationType } from '../lib/firestoreAuthError';
 import { exportToCSV } from '../lib/exportCSV';
 import { Download, Wallet, CreditCard as CCIcon, TrendingUp, TrendingDown } from 'lucide-react';
 import LoadingOverlay from '../components/ui/loading-overlay';
 import { useLocalization } from '../hooks/useLocalization';
+import { Transaction, Subscription, CreditCard, Category, Disclosure } from './reports/useReportsData';
+
+interface UpcomingBill {
+  type: 'Subscription' | 'Credit Card';
+  name: string;
+  amount: number | string;
+  nextDate: number;
+}
 
 export default function Dashboard() {
   const { formatCurrency, formatDate } = useLocalization();
-  const [transactions, setTransactions] = useState<any[]>([]);
-  const [subscriptions, setSubscriptions] = useState<any[]>([]);
-  const [creditCards, setCreditCards] = useState<any[]>([]);
-  const [categories, setCategories] = useState<any[]>([]);
-  const [disclosures, setDisclosures] = useState<any[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [creditCards, setCreditCards] = useState<CreditCard[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [disclosures, setDisclosures] = useState<Disclosure[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     let channel: any;
     const init = async () => {
       setLoading(true);
-      const user = auth.currentUser || await auth.getUser();
+      const user = auth.currentUser || (typeof (auth as any).getUser === 'function' ? await (auth as any).getUser() : null);
       if (!user) {
         setLoading(false);
         return;
@@ -36,28 +43,28 @@ export default function Dashboard() {
           db.from('credit_cards').select('*').eq('uid', user.uid),
           db.from('disclosures').select('*').eq('uid', user.uid)
         ]);
-        setCategories(catData || []);
-        setTransactions((transData || []).sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-        setSubscriptions(subData || []);
-        setCreditCards(ccData || []);
-        setDisclosures(discData || []);
+        setCategories(catData as Category[] || []);
+        setTransactions((transData as Transaction[] || []).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
+        setSubscriptions(subData as Subscription[] || []);
+        setCreditCards(ccData as CreditCard[] || []);
+        setDisclosures(discData as Disclosure[] || []);
 
         const chanTopic = `public:dashboard_${user.uid}_${Date.now()}`;
         channel = db.channel(chanTopic)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'categories', filter: `uid=eq.${user.uid}` }, () => {
-            db.from('categories').select('*').eq('uid', user.uid).then(r => { if (!r.error) setCategories(r.data || []); });
+            db.from('categories').select('*').eq('uid', user.uid).then(r => { if (!r.error) setCategories(r.data as Category[] || []); });
           })
           .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions', filter: `uid=eq.${user.uid}` }, () => {
-            db.from('transactions').select('*').eq('uid', user.uid).then(r => { if (!r.error) setTransactions((r.data || []).sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime())); });
+            db.from('transactions').select('*').eq('uid', user.uid).then(r => { if (!r.error) setTransactions((r.data as Transaction[] || []).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())); });
           })
           .on('postgres_changes', { event: '*', schema: 'public', table: 'subscriptions', filter: `uid=eq.${user.uid}` }, () => {
-            db.from('subscriptions').select('*').eq('uid', user.uid).then(r => { if (!r.error) setSubscriptions(r.data || []); });
+            db.from('subscriptions').select('*').eq('uid', user.uid).then(r => { if (!r.error) setSubscriptions(r.data as Subscription[] || []); });
           })
           .on('postgres_changes', { event: '*', schema: 'public', table: 'credit_cards', filter: `uid=eq.${user.uid}` }, () => {
-            db.from('credit_cards').select('*').eq('uid', user.uid).then(r => { if (!r.error) setCreditCards(r.data || []); });
+            db.from('credit_cards').select('*').eq('uid', user.uid).then(r => { if (!r.error) setCreditCards(r.data as CreditCard[] || []); });
           })
           .on('postgres_changes', { event: '*', schema: 'public', table: 'disclosures', filter: `uid=eq.${user.uid}` }, () => {
-            db.from('disclosures').select('*').eq('uid', user.uid).then(r => { if (!r.error) setDisclosures(r.data || []); });
+            db.from('disclosures').select('*').eq('uid', user.uid).then(r => { if (!r.error) setDisclosures(r.data as Disclosure[] || []); });
           }).subscribe();
       } catch (err: any) {
         handleFirestoreError(err, OperationType.LIST, "users/" + user?.uid + "/dashboard");
@@ -133,15 +140,26 @@ export default function Dashboard() {
   // Top expense category
   const expenseByCategory: Record<string, number> = {};
   transactions.filter(t => t.type !== 'income').forEach(t => {
-    const cid = t.category_id || t.categoryId || 'uncategorized';
+    const cid = t.category_id || 'uncategorized';
     expenseByCategory[cid] = (expenseByCategory[cid] || 0) + Number(t.amount || 0);
   });
   const topExpenseCatId = Object.keys(expenseByCategory).sort((a, b) => (expenseByCategory[b] || 0) - (expenseByCategory[a] || 0))[0];
   const topExpenseCategory = topExpenseCatId ? getCategoryName(topExpenseCatId) : '—';
 
-  const upcomingBills = subscriptions.map(s => ({ type: 'Subscription', name: s.name, amount: s.amount, nextDate: s.deduction_date || s.deductionDate })).concat(
-    creditCards.map(c => ({ type: 'Credit Card', name: c.name, amount: 'Varies', nextDate: c.due_date || c.dueDate }))
-  );
+  const upcomingBills: UpcomingBill[] = [
+    ...subscriptions.map(s => ({
+      type: 'Subscription' as const,
+      name: s.name,
+      amount: s.amount,
+      nextDate: s.deduction_date
+    })),
+    ...creditCards.map(c => ({
+      type: 'Credit Card' as const,
+      name: c.name,
+      amount: 'Varies',
+      nextDate: c.due_date
+    }))
+  ];
   
   const todayDateObj = new Date().getDate();
 
@@ -151,10 +169,10 @@ export default function Dashboard() {
   const handleExport = () => {
     const data = transactions.map(t => ({
       Date: formatDate(t.date),
-      Category: getCategoryName(t.category_id || t.categoryId),
+      Category: getCategoryName(t.category_id || ''),
       Type: t.type,
       Amount: t.amount,
-      Comment: t.comment
+      Comment: t.comment || ''
     }));
     exportToCSV(data, 'transactions.csv');
   };
@@ -214,7 +232,7 @@ export default function Dashboard() {
                 {transactions.slice(0, 8).map(t => (
                   <div key={t.id} className="flex min-w-0 items-center justify-between gap-3 py-2 border-b last:border-0">
                     <div className="min-w-0">
-                      <div className="truncate font-medium">{getCategoryName(t.category_id || t.categoryId)}</div>
+                      <div className="truncate font-medium">{getCategoryName(t.category_id || '')}</div>
                       <div className="text-xs text-muted-foreground">{formatDate(t.date)}</div>
                     </div>
                     <div className={"shrink-0 text-right font-medium " + (t.type === 'income' ? 'text-green-600' : 'text-red-600')}>
@@ -251,8 +269,8 @@ export default function Dashboard() {
                 {upcomingBills.slice(0,6).map((b, i) => (
                   <div key={i} className="flex min-w-0 items-center justify-between gap-3 py-1">
                     <div className="min-w-0">
-                      <div className="truncate font-medium">{b.name}</div>
-                      <div className="text-xs text-muted-foreground">{b.type} • Day {b.nextDate}</div>
+                      <div className="truncate font-medium">{b.name}</div> {/* b.name is string */}
+                      <div className="text-xs text-muted-foreground">{b.type} • Day {b.nextDate}</div> {/* b.nextDate is number */}
                     </div>
                     <div className="shrink-0 text-right font-medium text-red-600">{typeof b.amount === 'number' ? formatCurrency(b.amount) : b.amount}</div>
                   </div>

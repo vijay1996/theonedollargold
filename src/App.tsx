@@ -20,7 +20,6 @@ import CreditCards from './pages/CreditCards';
 import Profile from './pages/Profile';
 import Assets from './pages/Assets';
 import Reports from './pages/reports/Reports';
-import Investments from './pages/Investments';
 
 function ProtectedRoute({ user, loading }: { user: any; loading: boolean }) {
   if (loading) {
@@ -65,7 +64,6 @@ export default function App() {
               <Route path="transactions" element={<Transactions />} />
               <Route path="categories" element={<Categories />} />
               <Route path="assets" element={<Assets />} />
-              <Route path="investments" element={<Investments />} />
               <Route path="budgets" element={<Budgets />} />
               <Route path="subscriptions" element={<Subscriptions />} />
               <Route path="cards" element={<CreditCards />} />

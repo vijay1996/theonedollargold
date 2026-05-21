@@ -13,4 +13,6 @@ CREATE TABLE IF NOT EXISTS public.disclosures (
   updated_at bigint
 );
 
+ALTER TABLE public.disclosures ADD COLUMN current_value numeric;
+
 -- Note: Enable RLS and add policies consistent with your other tables (see 002_rls_and_rename.sql)

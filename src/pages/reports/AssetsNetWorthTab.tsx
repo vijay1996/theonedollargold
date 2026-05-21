@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { format, eachMonthOfInterval } from 'date-fns';
-import { ResponsiveContainer, AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, BarChart, Bar, ReferenceLine } from 'recharts';
+import { ResponsiveContainer, AreaChart, Area, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, PieChart, Pie, Cell, BarChart, Bar, ReferenceLine, ComposedChart } from 'recharts';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../../components/ui/card';
 import { useLocalization } from '../../hooks/useLocalization';
 import { ReportsData } from './useReportsData';
@@ -10,16 +10,30 @@ const COLORS = ['#10b981','#6366f1','#f59e0b','#3b82f6','#8b5cf6','#ec4899'];
 export function AssetsNetWorthTab({ data, from, to }: { data: ReportsData; from: Date; to: Date }) {
   const { formatCurrency } = useLocalization();
   const { transactions, disclosures } = data;
-  const totalAssets = disclosures.filter(d => d.type === 'asset').reduce((s, d) => s + Number(d.amount || 0), 0);
+
+  const totalAssets = disclosures.filter(d => d.type === 'asset').reduce((s, d) => s + Number(d.current_value ?? d.amount ?? 0), 0);
+  const totalIncome = transactions
+    .filter(t => {
+      const d = new Date(t.date);
+      return d >= from && d <= to && t.type === 'income';
+    })
+    .reduce((s, t) => s + Number(t.amount), 0);
+  const totalExpense = transactions
+    .filter(t => {
+      const d = new Date(t.date);
+      return d >= from && d <= to && t.type === 'expense';
+    })
+    .reduce((s, t) => s + Number(t.amount), 0);
+  const totalSavings = totalIncome - totalExpense;
   const totalLiabilities = disclosures.filter(d => d.type === 'liability').reduce((s, d) => s + Number(d.amount || 0), 0);
-  const netWorth = totalAssets - totalLiabilities;
+  const netWorth = totalAssets - totalLiabilities + totalSavings;
 
   // Asset category breakdown pie
   const assetPie = useMemo(() => {
     const map: Record<string, number> = {};
     disclosures.filter(d => d.type === 'asset').forEach(d => {
       const cat = d.category || 'Other';
-      map[cat] = (map[cat] || 0) + Number(d.amount || 0);
+      map[cat] = (map[cat] || 0) + Number(d.current_value ?? d.amount ?? 0);
     });
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   }, [disclosures]);
@@ -51,12 +65,15 @@ export function AssetsNetWorthTab({ data, from, to }: { data: ReportsData; from:
     let running = 0;
     const months = Object.entries(monthlyNet);
     const latest = months.reduce((s, [, v]) => s + v, 0);
-    const offset = netWorth - latest;
+    const hasAnyAssetsOrLiabilities = disclosures.length > 0;
     return months.map(([name, v]) => {
       running += v;
-      return { name, netWorth: running + offset };
+      const netWorthValue = running;
+      const assets = netWorthValue + totalAssets; // assets = netWorth + liabilities
+      const liabilities = totalLiabilities;
+      return { name, netWorth: assets - liabilities, assets, liabilities };
     });
-  }, [transactions, netWorth, from, to]);
+  }, [transactions, netWorth, from, to, disclosures.length, totalLiabilities]);
 
   // Assets vs Liabilities bar
   const balanceBarData = [
@@ -77,57 +94,22 @@ export function AssetsNetWorthTab({ data, from, to }: { data: ReportsData; from:
       {/* Net Worth KPI */}
       <div className="grid grid-cols-3 gap-3">
         <Card><CardContent className="p-4 text-center"><p className="text-xs text-muted-foreground">Total Assets</p><p className="text-xl font-bold text-green-700">{cfmt(totalAssets)}</p></CardContent></Card>
+        <Card>
+          <CardContent className="p-4 text-center">
+            <p className="text-xs text-muted-foreground">Total Savings</p>
+            <p className={`text-xl font-bold ${totalSavings >= 0 ? 'text-green-700' : 'text-red-600'}`}>{cfmt(totalSavings)}</p>
+          </CardContent>
+        </Card>
         <Card><CardContent className="p-4 text-center"><p className="text-xs text-muted-foreground">Total Liabilities</p><p className="text-xl font-bold text-red-600">{cfmt(totalLiabilities)}</p></CardContent></Card>
-        <Card><CardContent className="p-4 text-center"><p className="text-xs text-muted-foreground">Net Worth</p><p className={`text-xl font-bold ${netWorth >= 0 ? 'text-indigo-700' : 'text-red-600'}`}>{cfmt(netWorth)}</p></CardContent></Card>
       </div>
-
-      {/* Net Worth Area Trend */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Net Worth Trend</CardTitle>
-          <CardDescription>Estimated net worth anchored to your disclosures</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={netWorthTrend} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <defs>
-                <linearGradient id="gnw" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={nwColor} stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor={nwColor} stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis domain={[(dataMin: number) => Math.min(0, dataMin), (dataMax: number) => Math.max(0, dataMax)]} tickFormatter={cfmt} tick={{ fontSize: 10 }} width={80} />
-              <Tooltip formatter={cfmt} />
-              <ReferenceLine y={0} stroke="#64748b" strokeWidth={1} />
-              <Area type="monotone" dataKey="netWorth" name="Net Worth" stroke={nwColor} fill="url(#gnw)" strokeWidth={2} />
-            </AreaChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
-      {/* Assets vs Liabilities Bar */}
-      <Card>
-        <CardHeader><CardTitle>Assets vs Liabilities Overview</CardTitle></CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={balanceBarData} layout="vertical" margin={{ top: 4, right: 16, left: 70, bottom: 0 }}>
-              <XAxis type="number" tickFormatter={cfmtAbs} tick={{ fontSize: 10 }} />
-              <YAxis type="category" dataKey="name" tick={{ fontSize: 12 }} />
-              <Tooltip formatter={(v: number) => cfmtAbs(v)} />
-              <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                {balanceBarData.map((e, i) => <Cell key={i} fill={e.fill} />)}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-
+      <Card className={netWorth > 0 ? 'bg-green-200' : 'bg-red-200'}><CardContent className="p-4 text-center"><p className="text-xs text-muted-foreground">Net Worth</p><p className={`text-xl font-bold ${netWorth >= 0 ? 'text-green-900' : 'text-red-900'}`}>{cfmt(netWorth)}</p></CardContent></Card>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Asset Pie */}
         <Card>
-          <CardHeader><CardTitle>Asset Allocation</CardTitle><CardDescription>By category</CardDescription></CardHeader>
+          <CardHeader>
+            <CardTitle>Asset Allocation</CardTitle>
+            <CardDescription>By category</CardDescription>
+          </CardHeader>
           <CardContent>
             {assetPie.length > 0 ? (
               <div className="flex flex-col sm:flex-row items-center gap-4">
@@ -136,22 +118,20 @@ export function AssetsNetWorthTab({ data, from, to }: { data: ReportsData; from:
                     <Pie data={assetPie} cx="50%" cy="50%" innerRadius={35} outerRadius={72} paddingAngle={2} dataKey="value">
                       {assetPie.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                     </Pie>
-                    <Tooltip formatter={cfmt} />
+                    <Tooltip formatter={(v) => cfmt(Number(v))} />
                   </PieChart>
                 </ResponsiveContainer>
-                <div className="flex-1 space-y-1 min-w-0">
-                  {assetPie.map((c, i) => (
-                    <div key={c.name} className="flex justify-between gap-2 text-xs">
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="h-2 w-2 rounded-full shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
-                        <span className="truncate text-muted-foreground">{c.name}</span>
-                      </div>
-                      <span className="font-medium shrink-0">{cfmt(c.value)}</span>
+                <div className="flex flex-col gap-2">
+                  {assetPie.map(({ name, value }) => (
+                    <div key={name} className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full" style={{ backgroundColor: COLORS[assetPie.findIndex(p => p.name === name) % COLORS.length] }} />
+                      <span className="text-sm font-medium">{name}</span>
+                      <span className="ml-auto font-medium">{cfmt(value)}</span>
                     </div>
                   ))}
                 </div>
               </div>
-            ) : <p className="text-sm text-muted-foreground py-6 text-center">No assets recorded.</p>}
+            ) : (<p className="text-center text-muted-foreground">No assets found.</p>) }
           </CardContent>
         </Card>
 
@@ -166,7 +146,7 @@ export function AssetsNetWorthTab({ data, from, to }: { data: ReportsData; from:
                     <Pie data={liabPie} cx="50%" cy="50%" innerRadius={35} outerRadius={72} paddingAngle={2} dataKey="value">
                       {liabPie.map((_, i) => <Cell key={i} fill={['#ef4444','#f97316','#f59e0b','#ec4899','#8b5cf6'][i % 5]} />)}
                     </Pie>
-                    <Tooltip formatter={cfmt} />
+                    <Tooltip formatter={(v) => cfmt(Number(v))} />
                   </PieChart>
                 </ResponsiveContainer>
                 <div className="flex-1 space-y-1 min-w-0">
@@ -186,25 +166,48 @@ export function AssetsNetWorthTab({ data, from, to }: { data: ReportsData; from:
         </Card>
       </div>
 
-      {/* Cumulative Step Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Cumulative Step Chart</CardTitle>
-          <CardDescription>Net worth built step-by-step each month</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={netWorthTrend} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" className="opacity-30" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} />
-              <YAxis domain={[(dataMin: number) => Math.min(0, dataMin), (dataMax: number) => Math.max(0, dataMax)]} tickFormatter={cfmt} tick={{ fontSize: 10 }} width={80} />
-              <Tooltip formatter={cfmt} />
-              <ReferenceLine y={0} stroke="#64748b" strokeWidth={1} />
-              <Line type="stepAfter" dataKey="netWorth" name="Net Worth" stroke={stepColor} strokeWidth={2} dot={{ r: 4 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
+      {/* Assets vs Liabilities Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Assets vs Liabilities</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={250}>
+              <ComposedChart data={netWorthTrend}>
+                <defs>
+                  <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="#ef4444" stopOpacity={0.4} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis tickFormatter={cfmtAbs} />
+                <Tooltip formatter={(v) => cfmt(Number(v))} />
+                <Line type="monotone" dataKey="liabilities" stroke="#ef4444" name="Liabilities" dot={true} />
+                <Line type="monotone" dataKey="assets" stroke="#10b981" name="Assets" dot={true} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Net Worth Trend */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Net Worth Trend</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={netWorthTrend}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="name" />
+                <YAxis tickFormatter={cfmtAbs} />
+                <Tooltip formatter={(v) => cfmt(Number(v))} />
+                <Line type="monotone" dataKey="netWorth" dot={true} />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
     </div>
   );
 }

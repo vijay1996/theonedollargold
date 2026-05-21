@@ -1,0 +1,2 @@
+export const primaryButtonClass = "bg-indigo-700 hover:bg-indigo-800 text-white border-indigo-900 border-1 font-bold py-2 px-4 rounded"
+export const secondaryButtonClass = "bg-white hover:bg-gray-100 text-indigo-800 border-indigo-900 border-1 font-bold py-2 px-4 rounded"
