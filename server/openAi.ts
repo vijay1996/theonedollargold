@@ -4,7 +4,14 @@ import dotenv from 'dotenv';
 import ws from 'ws';
 dotenv.config({ path: '.env.local' });
 
-const supabase = createClient(process.env.SUPABASE_URL || '', process.env.SUPABASE_SERVICE_KEY || '', { realtime: { transport: ws as any } });
+function getSupabaseClient() {
+  const url = process.env.SUPABASE_URL || '';
+  const key = process.env.SUPABASE_SERVICE_KEY || '';
+  if (!url || !key) {
+    throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_KEY environment variables');
+  }
+  return createClient(url, key, { realtime: { transport: ws as any } });
+}
 
 const openai = new OpenAi({
   apiKey: process.env.OPENAI_API_KEY,
@@ -32,13 +39,14 @@ const content = `
 `;
 
 export default async function getReport() {
-    const users = await getUsers();
+    const supabase = getSupabaseClient();
+    const users = await getUsers(supabase);
     if (!users?.length) return console.log('No users found');
 
     for (const uid of users) {
         const [transactions, assetsAndLiabilities] = await Promise.all([
-            getTransactions(uid),
-            getAssetsAndLiabilities(uid)
+            getTransactions(uid, supabase),
+            getAssetsAndLiabilities(uid, supabase)
         ]);
 
         const data = { transactions, assetsAndLiabilities };
@@ -71,7 +79,7 @@ export default async function getReport() {
     }
 }
 
-async function getTransactions(userId: string) {
+async function getTransactions(userId: string, supabase: ReturnType<typeof getSupabaseClient>) {
     const { data, error} = await supabase.from('transactions').select('*, categories(name)').eq('uid', userId);
     if (error) console.error('Supabase error:', error);
     const formattedData: {[key: string]: number} = {};
@@ -89,7 +97,7 @@ async function getTransactions(userId: string) {
     return data;
 }
 
-async function getAssetsAndLiabilities(userId: string) {
+async function getAssetsAndLiabilities(userId: string, supabase: ReturnType<typeof getSupabaseClient>) {
     const { data, error } = await supabase.from('disclosures').select('*').eq('uid', userId);
     if (error) console.error('Supabase error:', error);
     const formattedData: {name: string, type: string, category: string, amount: number, currentValue?: number}[] = []
@@ -114,7 +122,7 @@ async function getAssetsAndLiabilities(userId: string) {
     return formattedData;
 }
 
-async function getUsers() {
+async function getUsers(supabase: ReturnType<typeof getSupabaseClient>) {
     const { data, error } = await supabase.from('users').select('*');
     if (error) console.error('Supabase error:', error);
     return data?.map(user => user.uid);

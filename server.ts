@@ -113,7 +113,11 @@ async function startServer() {
     });
   }
 
-  crons();
+  try {
+    crons();
+  } catch (err) {
+    console.error('Failed to start cron jobs:', err);
+  }
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log("Server running on port " + PORT);

@@ -6,7 +6,7 @@ export default function crons () {
 
     cron.schedule('0 0 2 * *', () => {
         console.log('Runs on 2nd midnight every month...');
-        getReport();
+        getReport().catch(err => console.error('getReport cron error:', err));
     });
 
     console.log('Crons started.');
