@@ -2,8 +2,8 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import ws from 'ws';
 
 
-const url = (import.meta as any).env?.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
-const key = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+const url = (import.meta as any).env?.VITE_SUPABASE_URL;
+const key = (import.meta as any).env?.VITE_SUPABASE_ANON_KEY;
 
 if (!url || !key) {
 	console.warn('Supabase URL or ANON key not found in environment variables. Set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
