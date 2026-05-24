@@ -27,6 +27,13 @@ RUN npm ci --include=dev
 # Copy application code
 COPY . .
 
+# Build args for Vite (baked into frontend at build time)
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_ANON_KEY
+
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL
+ENV VITE_SUPABASE_ANON_KEY=$VITE_SUPABASE_ANON_KEY
+
 # Build application
 RUN npm run build
 
