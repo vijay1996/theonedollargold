@@ -5,13 +5,20 @@ import dotenv from "dotenv";
 import fs from 'fs';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import crons from "./server/crons";
-import getReport from "./server/openAi";
 import ws from "ws";
 
 
 // Prefer .env.local when present (common for local overrides), otherwise fall back to .env
 const envPath = fs.existsSync('.env.local') ? '.env.local' : (fs.existsSync('.env') ? '.env' : undefined);
 dotenv.config(envPath ? { path: envPath } : undefined);
+
+console.log('ENV CHECK:', {
+    PORT: process.env.PORT,
+    SUPABASE_URL: process.env.SUPABASE_URL ? '✓ set' : '✗ missing',
+    VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ? '✓ set' : '✗ missing',
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY ? '✓ set' : '✗ missing',
+    NODE_ENV: process.env.NODE_ENV,
+});
 
 let _supabaseAdmin: any | null = null;
 function getSupabaseAdmin() {
