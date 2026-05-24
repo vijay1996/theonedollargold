@@ -27,7 +27,7 @@ function getSupabaseAdmin() {
 
 async function startServer() {
   const app = express();
-  const PORT = process.env.PORT || 3000;
+  const PORT = Number(process.env.PORT) || 3000;
 
   // Allow larger JSON payloads and form bodies to support file uploads metadata
   app.use(express.json({ limit: '50mb' }));
