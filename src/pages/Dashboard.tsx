@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button';
 import { format, subMonths } from 'date-fns';
 import { handleFirestoreError, OperationType } from '../lib/firestoreAuthError';
 import { exportToCSV } from '../lib/exportCSV';
-import { Download, Wallet, CreditCard as CCIcon, TrendingUp, TrendingDown } from 'lucide-react';
+import { Download, Wallet, CreditCard as CCIcon, TrendingUp, TrendingDown, HandMetal, Coins, House, Car } from 'lucide-react';
 import LoadingOverlay from '../components/ui/loading-overlay';
 import { useLocalization } from '../hooks/useLocalization';
 import { Transaction, Subscription, CreditCard, Category, Disclosure } from './reports/useReportsData';
@@ -189,40 +189,21 @@ export default function Dashboard() {
           <Button variant="outline" onClick={handleExport} className="w-full sm:w-auto"><Download className="h-4 w-4 mr-2"/> Export</Button>
         </div>
       </div>
+      
 
       {/* Top summary strip */}
-      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-4">
-        <Card><CardContent className="flex min-w-0 items-center gap-3 p-3"><div className="shrink-0 p-2 rounded-md bg-green-50 text-green-600"><TrendingUp className="h-5 w-5"/></div><div className="min-w-0"><div className="text-xs text-muted-foreground">Income (This Month)</div><div className="break-words text-base font-bold text-green-700 sm:text-lg">{formatCurrency(totalIncome)}</div></div></CardContent></Card>
-        <Card><CardContent className="flex min-w-0 items-center gap-3 p-3"><div className="shrink-0 p-2 rounded-md bg-red-50 text-red-600"><TrendingDown className="h-5 w-5"/></div><div className="min-w-0"><div className="text-xs text-muted-foreground">Expenses (This Month)</div><div className="break-words text-base font-bold text-red-700 sm:text-lg">{formatCurrency(totalExpense)}</div></div></CardContent></Card>
-        <Card><CardContent className="flex min-w-0 items-center gap-3 p-3"><div className="shrink-0 p-2 rounded-md bg-indigo-50 text-indigo-700"><CCIcon className="h-5 w-5"/></div><div className="min-w-0"><div className="text-xs text-muted-foreground">Net Worth</div><div className="break-words text-base font-bold text-indigo-700 sm:text-lg">{formatCurrency(netWorthData[netWorthData.length - 1]?.amount || 0)}</div></div></CardContent></Card>
-        <Card><CardContent className="flex min-w-0 items-center gap-3 p-3"><div className="shrink-0 p-2 rounded-md bg-slate-100 text-slate-700"><Wallet className="h-5 w-5"/></div><div className="min-w-0"><div className="text-xs text-muted-foreground">Net Savings</div><div className="break-words text-base font-bold sm:text-lg">{formatCurrency(totalIncome - totalExpense)}</div></div></CardContent></Card>
+      <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 lg:grid-cols-3">
+        <Card><CardContent className="flex min-w-0 items-center gap-3 p-3"><div className="shrink-0 p-2 rounded-md bg-indigo-50 text-indigo-700"><CCIcon className="h-5 w-5"/></div><div className="min-w-0"><div className="text-xs text-muted-foreground">Net Worth</div><div className="wrap-break-word text-base font-bold text-indigo-700 sm:text-lg">{formatCurrency(netWorthData[netWorthData.length - 1]?.amount + totalIncome - totalExpense || 0)}</div></div></CardContent></Card>
+        <Card><CardContent className="flex min-w-0 items-center gap-3 p-3"><div className="shrink-0 p-2 rounded-md bg-green-50 text-green-600"><TrendingUp className="h-5 w-5"/></div><div className="min-w-0"><div className="text-xs text-muted-foreground">Income (This Month)</div><div className="wrap-break-word text-base font-bold text-green-700 sm:text-lg">{formatCurrency(totalIncome)}</div></div></CardContent></Card>
+        <Card><CardContent className="flex min-w-0 items-center gap-3 p-3"><div className="shrink-0 p-2 rounded-md bg-red-50 text-red-600"><TrendingDown className="h-5 w-5"/></div><div className="min-w-0"><div className="text-xs text-muted-foreground">Expenses (This Month)</div><div className="wrap-break-word text-base font-bold text-red-700 sm:text-lg">{formatCurrency(totalExpense)}</div></div></CardContent></Card>
+        <Card><CardContent className="flex min-w-0 items-center gap-3 p-3"><div className="shrink-0 p-2 rounded-md bg-indigo-50 text-indigo-700"><Wallet className="h-5 w-5"/></div><div className="min-w-0"><div className="text-xs text-muted-foreground">Net Savings</div><div className="wrap-break-word text-base font-bold text-indigo-700 sm:text-lg">{formatCurrency(totalIncome - totalExpense)}</div></div></CardContent></Card>
+        <Card><CardContent className="flex min-w-0 items-center gap-3 p-3"><div className="shrink-0 p-2 rounded-md bg-green-50 text-green-600"><House className="h-5 w-5"/></div><div className="min-w-0"><div className="text-xs text-muted-foreground">Total Assets</div><div className="wrap-break-word text-base font-bold text-green-700 sm:text-lg">{formatCurrency(totalAssets)}</div></div></CardContent></Card>
+        <Card><CardContent className="flex min-w-0 items-center gap-3 p-3"><div className="shrink-0 p-2 rounded-md bg-red-50 text-red-700"><Car className="h-5 w-5"/></div><div className="min-w-0"><div className="text-xs text-muted-foreground">Total Liabilities</div><div className="wrap-break-word text-base font-bold text-red-700 sm:text-lg">{formatCurrency(totalLiabilities)}</div></div></CardContent></Card>
       </div>
 
       {/* Main content: left large column, right narrow column */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Financial Snapshot</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="min-w-0 p-3 rounded-md bg-green-50">
-                  <div className="text-xs text-muted-foreground">Total Assets</div>
-                  <div className="break-words text-base font-bold text-green-700 sm:text-lg">{formatCurrency(totalAssets)}</div>
-                </div>
-                <div className="min-w-0 p-3 rounded-md bg-red-50">
-                  <div className="text-xs text-muted-foreground">Total Liabilities</div>
-                  <div className="break-words text-base font-bold text-red-700 sm:text-lg">{formatCurrency(totalLiabilities)}</div>
-                </div>
-                <div className="min-w-0 p-3 rounded-md bg-indigo-50">
-                  <div className="text-xs text-muted-foreground">Net Worth (disclosures)</div>
-                  <div className="break-words text-base font-bold text-indigo-700 sm:text-lg">{formatCurrency(totalAssets - totalLiabilities)}</div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
           <Card>
             <CardHeader>
               <CardTitle>Recent Transactions</CardTitle>

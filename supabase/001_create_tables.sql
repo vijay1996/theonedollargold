@@ -92,3 +92,7 @@ END$$;
 --   FOR ALL USING (uid::text = auth.uid()) WITH CHECK (uid::text = auth.uid());
 
 -- Repeat RLS enabling and policy creation for transactions, subscriptions, budgets, creditCards.
+
+ALTER TABLE public.transactions ADD CONSTRAINT category_reference FOREIGN KEY(category_id) REFERENCES categories(id) ON DELETE CASCADE;
+ALTER TABLE public.subscriptions ADD CONSTRAINT category_reference FOREIGN KEY(category_id) REFERENCES categories(id) ON DELETE CASCADE;
+ALTER TABLE public.budgets ADD CONSTRAINT category_reference FOREIGN KEY(category_id) REFERENCES categories(id) ON DELETE CASCADE;

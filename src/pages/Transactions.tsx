@@ -16,6 +16,7 @@ import { Trash2, Plus, Edit } from 'lucide-react';
 import { format } from 'date-fns';
 import { Transaction, Category } from './reports/useReportsData';
 import { primaryButtonClass, secondaryButtonClass } from '../lib/constants';
+import PageHeader from '../components/layout/PageHeader';
  
 interface BulkTransactionRow {
   id: string;
@@ -150,10 +151,8 @@ export default function Transactions() {
   return (
     <div className="space-y-6 relative">
       <LoadingOverlay show={loading || uploading || editLoading} label="Updating transactions" />
-      <div className="flex items-center gap-4">
-        <h2 className="text-3xl font-bold tracking-tight">Transactions</h2>
-        <p className="text-muted-foreground">Log your daily income and expenses.</p>
-      </div>
+      
+      <PageHeader title="Transactions" description='Log your daily income and expenses.' />
 
       <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b">
           <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
@@ -161,7 +160,7 @@ export default function Transactions() {
               placeholder="Search comments..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full sm:w-[200px]"
+              className="w-full sm:w-50"
             />
             <div className="grid grid-cols-2 gap-2 sm:flex">
               <Select value={filterType} onValueChange={v => setFilterType(String(v))}>
@@ -197,53 +196,72 @@ export default function Transactions() {
           <Button onClick={() => setBulkOpen(true)} className={`flex items-center ${secondaryButtonClass}`}>
             <Plus className="h-4 w-4 mr-2" /> Bulk Add
           </Button>
+        </div>
+          </div>
+      </CardHeader>
 
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add Transaction</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleAdd} className="space-y-4 pt-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium">Type</label>
-                <Select value={type} onValueChange={(val) => { setType(String(val)); setCategoryId(''); }}>
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Select type">{type === 'income' ? 'Income' : 'Expense'}</SelectValue></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="expense">Expense</SelectItem>
-                    <SelectItem value="income">Income</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium">Date</label>
-                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium">Category</label>
-                <Select value={categoryId} onValueChange={(val) => setCategoryId(String(val))} required>
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Select category">{categoryId ? getCategoryName(categoryId) : undefined}</SelectValue></SelectTrigger>
-                  <SelectContent>
-                    {filteredCategories.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                    {filteredCategories.length === 0 && <div className="p-2 text-sm text-gray-500">No categories found. Create one first.</div>}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Amount</label>
-                <Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required placeholder="0.00" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Comment</label>
-                <Input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Optional comment" />
-              </div>
-              <Button type="submit" disabled={loading} className="w-full">Save Transaction</Button>
-            </form>
-          </DialogContent>
-        </Dialog>
+      <Card>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Date</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Comment</TableHead>
+                <TableHead className="text-right">Amount</TableHead>
+                <TableHead className="w-20"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {transactions.filter(t => {
+                if (filterType !== 'all' && t.type !== filterType) return false;
+                if (searchQuery && !(t.comment || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
+                return true;
+              }).sort((a, b) => {
+                const dateA = new Date(a.date).getTime();
+                const dateB = new Date(b.date).getTime();
+                if (sortBy === 'date-desc') return dateB - dateA;
+                if (sortBy === 'date-asc') return dateA - dateB;
+                if (sortBy === 'amount-desc') return b.amount - a.amount;
+                if (sortBy === 'amount-asc') return a.amount - b.amount;
+                return 0;
+              }).map((t) => (
+                <TableRow key={t.id}>
+                  <TableCell className="whitespace-nowrap">{formatDate(t.date)}</TableCell>
+                  <TableCell>{getCategoryName(t.category_id || '')}</TableCell>
+                  <TableCell className="text-muted-foreground max-w-[200px] truncate" title={t.comment}>{t.comment}</TableCell>
+                  <TableCell className={t.type === 'income' ? 'text-right font-medium text-green-600 whitespace-nowrap' : 'text-right font-medium text-red-600 whitespace-nowrap'}>
+                    {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" size="icon" onClick={() => openEdit(t)}>
+                        <Edit className="h-4 w-4 text-foreground" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(t.id)}>
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {transactions.filter(t => {
+                if (filterType !== 'all' && t.type !== filterType) return false;
+                if (searchQuery && !(t.comment || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
+                return true;
+              }).length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                    No transactions found.
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
-        <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+      <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
           <DialogContent className="flex max-h-[90vh] flex-col overflow-hidden sm:max-w-5xl">
             <DialogHeader>
               <DialogTitle>Bulk Add Transactions</DialogTitle>
@@ -308,71 +326,7 @@ export default function Transactions() {
               </div>
             </form>
           </DialogContent>
-        </Dialog>
-        </div>
-          </div>
-      </CardHeader>
-
-      <Card>
-        <CardContent className="p-0 overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Comment</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead className="w-[80px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {transactions.filter(t => {
-                if (filterType !== 'all' && t.type !== filterType) return false;
-                if (searchQuery && !(t.comment || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
-                return true;
-              }).sort((a, b) => {
-                const dateA = new Date(a.date).getTime();
-                const dateB = new Date(b.date).getTime();
-                if (sortBy === 'date-desc') return dateB - dateA;
-                if (sortBy === 'date-asc') return dateA - dateB;
-                if (sortBy === 'amount-desc') return b.amount - a.amount;
-                if (sortBy === 'amount-asc') return a.amount - b.amount;
-                return 0;
-              }).map((t) => (
-                <TableRow key={t.id}>
-                  <TableCell className="whitespace-nowrap">{formatDate(t.date)}</TableCell>
-                  <TableCell>{getCategoryName(t.category_id || '')}</TableCell>
-                  <TableCell className="text-muted-foreground max-w-[200px] truncate" title={t.comment}>{t.comment}</TableCell>
-                  <TableCell className={t.type === 'income' ? 'text-right font-medium text-green-600 whitespace-nowrap' : 'text-right font-medium text-red-600 whitespace-nowrap'}>
-                    {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button variant="ghost" size="icon" onClick={() => openEdit(t)}>
-                        <Edit className="h-4 w-4 text-foreground" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(t.id)}>
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-              {transactions.filter(t => {
-                if (filterType !== 'all' && t.type !== filterType) return false;
-                if (searchQuery && !(t.comment || '').toLowerCase().includes(searchQuery.toLowerCase())) return false;
-                return true;
-              }).length === 0 && (
-                <TableRow>
-                  <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                    No transactions found.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      </Dialog>
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
         <DialogContent>
           <DialogHeader>
@@ -415,6 +369,50 @@ export default function Transactions() {
             <Button type="submit" disabled={editLoading} className="w-full">Update Transaction</Button>
           </form>
         </DialogContent>
+      </Dialog>
+      <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add Transaction</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleAdd} className="space-y-4 pt-4">
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium">Type</label>
+                <Select value={type} onValueChange={(val) => { setType(String(val)); setCategoryId(''); }}>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Select type">{type === 'income' ? 'Income' : 'Expense'}</SelectValue></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="expense">Expense</SelectItem>
+                    <SelectItem value="income">Income</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium">Date</label>
+                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-sm font-medium">Category</label>
+                <Select value={categoryId} onValueChange={(val) => setCategoryId(String(val))} required>
+                  <SelectTrigger className="w-full"><SelectValue placeholder="Select category">{categoryId ? getCategoryName(categoryId) : undefined}</SelectValue></SelectTrigger>
+                  <SelectContent>
+                    {filteredCategories.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ))}
+                    {filteredCategories.length === 0 && <div className="p-2 text-sm text-gray-500">No categories found. Create one first.</div>}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Amount</label>
+                <Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required placeholder="0.00" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Comment</label>
+                <Input value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Optional comment" />
+              </div>
+              <Button type="submit" disabled={loading} className="w-full">Save Transaction</Button>
+            </form>
+          </DialogContent>
       </Dialog>
     </div>
   );

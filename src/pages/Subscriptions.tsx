@@ -14,6 +14,7 @@ import LoadingOverlay from '../components/ui/loading-overlay';
 import { useLocalization } from '../hooks/useLocalization';
 import { Subscription, Category } from './reports/useReportsData';
 import { primaryButtonClass } from '../lib/constants';
+import PageHeader from '../components/layout/PageHeader';
 
 export default function Subscriptions() {
   const { formatCurrency } = useLocalization();
@@ -148,71 +149,72 @@ export default function Subscriptions() {
   return (
     <div className="space-y-6">
       <LoadingOverlay show={loading} label="Updating subscriptions" />
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-3xl font-bold tracking-tight">Subscriptions</h2>
-          <p className="text-muted-foreground">Manage your recurring payments.</p>
-        </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger>
-            <Button className={`flex items-center ${primaryButtonClass}`}><Plus className="h-4 w-4 mr-2" /> Add Subscription</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add Subscription</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleAdd} className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Name</label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. Netflix" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Amount</label>
-                <Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Category</label>
-                <Select value={categoryId} onValueChange={v => setCategoryId(String(v))} required>
-                  <SelectTrigger><SelectValue placeholder="Select category">{categoryId ? getCategoryName(categoryId) : undefined}</SelectValue></SelectTrigger>
-                  <SelectContent>
-                    {categories.filter(c => c.type === 'expense').map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Frequency</label>
-                <Select value={frequency} onValueChange={v => setFrequency(String(v))}>
-                  <SelectTrigger><SelectValue placeholder="Select frequency">{frequency === 'yearly' ? 'Yearly' : 'Monthly'}</SelectValue></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                    <SelectItem value="yearly">Yearly</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              {frequency === 'yearly' && (
+
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b">
+        <div className="flex w-full flex-col justify-between sm:flex-row sm:flex-wrap">
+          <PageHeader title="Subscriptions" description="Manage your recurring payments."/>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger>
+              <Button className={`flex items-center ${primaryButtonClass}`}><Plus className="h-4 w-4 mr-2" /> Add Subscription</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Subscription</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleAdd} className="space-y-4 pt-4">
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Deduction Month</label>
-                  <Select value={deductionMonth} onValueChange={v => setDeductionMonth(String(v))}>
-                    <SelectTrigger><SelectValue placeholder="Select month" /></SelectTrigger>
+                  <label className="text-sm font-medium">Name</label>
+                  <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. Netflix" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Amount</label>
+                  <Input type="number" step="0.01" value={amount} onChange={(e) => setAmount(e.target.value)} required />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Category</label>
+                  <Select value={categoryId} onValueChange={v => setCategoryId(String(v))} required>
+                    <SelectTrigger><SelectValue placeholder="Select category">{categoryId ? getCategoryName(categoryId) : undefined}</SelectValue></SelectTrigger>
                     <SelectContent>
-                      {Array.from({length: 12}).map((_, i) => (
-                        <SelectItem key={i+1} value={(i+1).toString()}>{new Date(2000, i, 1).toLocaleString('default', { month: 'long' })}</SelectItem>
+                      {categories.filter(c => c.type === 'expense').map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-              )}
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Deduction Day</label>
-                <Input type="number" min="1" max="31" value={deductionDate} onChange={(e) => setDeductionDate(e.target.value)} required placeholder="e.g. 15" />
-              </div>
-              <Button type="submit" disabled={loading} className="w-full">Save Subscription</Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Frequency</label>
+                  <Select value={frequency} onValueChange={v => setFrequency(String(v))}>
+                    <SelectTrigger><SelectValue placeholder="Select frequency">{frequency === 'yearly' ? 'Yearly' : 'Monthly'}</SelectValue></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="yearly">Yearly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {frequency === 'yearly' && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Deduction Month</label>
+                    <Select value={deductionMonth} onValueChange={v => setDeductionMonth(String(v))}>
+                      <SelectTrigger><SelectValue placeholder="Select month" /></SelectTrigger>
+                      <SelectContent>
+                        {Array.from({length: 12}).map((_, i) => (
+                          <SelectItem key={i+1} value={(i+1).toString()}>{new Date(2000, i, 1).toLocaleString('default', { month: 'long' })}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Deduction Day</label>
+                  <Input type="number" min="1" max="31" value={deductionDate} onChange={(e) => setDeductionDate(e.target.value)} required placeholder="e.g. 15" />
+                </div>
+                <Button type="submit" disabled={loading} className="w-full">Save Subscription</Button>
+              </form>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </CardHeader>
+      
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {subscriptions.map(s => (

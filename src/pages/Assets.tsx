@@ -15,6 +15,7 @@ import LoadingOverlay from '../components/ui/loading-overlay';
 import { useLocalization } from '../hooks/useLocalization';
 import { Disclosure, Category } from './reports/useReportsData';
 import { primaryButtonClass } from '../lib/constants';
+import PageHeader from '../components/layout/PageHeader';
 
 export default function Assets() {
   const { formatCurrency } = useLocalization();
@@ -173,43 +174,99 @@ const [bulkText, setBulkText] = useState('');
   return (
     <div className="space-y-4">
       <LoadingOverlay show={loading} label="Updating disclosures" />
-      <div className="min-w-0">
-        <div className="flex items-center gap-4">
-          <h2 className="text-3xl font-bold tracking-tight">Assets &amp; Liabilities</h2>
-          <p className="text-muted-foreground">Record and manage your personal and business disclosures.</p>
-        </div>
-      </div>
+      
+      <PageHeader title="Assets &amp; Liabilities" description="Record and manage your personal and business disclosures."/>
 
       {/* Toolbar */}
-      <div className="flex items-center gap-4">
-        <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-48" />
-          <Select value={filterType} onValueChange={v => setFilterType(v as 'all' | 'asset' | 'liability')}>
-            <SelectTrigger className="w-[120px]">
-              <SelectValue placeholder="All" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="asset">Asset</SelectItem>
-              <SelectItem value="liability">Liability</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={sortBy} onValueChange={v => setSortBy(v as 'Date ↓' | 'Date ↑' | 'Name A-Z' | 'Name Z-A')}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="Sort" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Date ↓">Date ↓</SelectItem>
-              <SelectItem value="Date ↑">Date ↑</SelectItem>
-              <SelectItem value="Name A-Z">Name A-Z</SelectItem>
-              <SelectItem value="Name Z-A">Name Z-A</SelectItem>
-            </SelectContent>
-          </Select>
-        <Button onClick={() => { setOpen(true); setEditingId(null); }} className={`flex items-center ${primaryButtonClass}`}>
-          <Plus className="h-4 w-4 mr-2" />Add Disclosure
-        </Button>
-      </div>
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b">
+        <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
+          <Input placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-48" />
+            <Select value={filterType} onValueChange={v => setFilterType(v as 'all' | 'asset' | 'liability')}>
+              <SelectTrigger className="w-30">
+                <SelectValue placeholder="All" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="asset">Asset</SelectItem>
+                <SelectItem value="liability">Liability</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={sortBy} onValueChange={v => setSortBy(v as 'Date ↓' | 'Date ↑' | 'Name A-Z' | 'Name Z-A')}>
+              <SelectTrigger className="w-37.5">
+                <SelectValue placeholder="Sort" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Date ↓">Date ↓</SelectItem>
+                <SelectItem value="Date ↑">Date ↑</SelectItem>
+                <SelectItem value="Name A-Z">Name A-Z</SelectItem>
+                <SelectItem value="Name Z-A">Name Z-A</SelectItem>
+              </SelectContent>
+            </Select>
+          <Button onClick={() => { setOpen(true); setEditingId(null); }} className={`flex items-center ${primaryButtonClass}`}>
+            <Plus className="h-4 w-4 mr-2" />Add Disclosure
+          </Button>
+        </div>
+      </CardHeader>
 
-      {/* Add/Edit Dialog */}
+    <Card>
+      <CardHeader>
+        <CardTitle>Your Disclosures</CardTitle>
+      </CardHeader>
+      <CardContent className="overflow-x-auto">
+        {items.length === 0 ? (
+          <div className="text-center py-6 text-muted-foreground">No disclosures yet.</div>
+        ) : (
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Category</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead className="w-30"></TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {items
+                .filter(i => {
+                  if (filterType !== 'all' && i.type !== filterType) return false;
+                  const q = searchQuery.toLowerCase();
+                  if (q && !(i.name?.toLowerCase().includes(q) || (i.comment?.toLowerCase().includes(q)))) return false;
+                  return true;
+                })
+                .sort((a,b) => {
+                  if (sortBy === 'Date ↓') return (b.created_at||0) - (a.created_at||0);
+                  if (sortBy === 'Date ↑') return (a.created_at||0) - (b.created_at||0);
+                  if (sortBy === 'Name A-Z') return a.name?.localeCompare(b.name||'') ?? 0;
+                  if (sortBy === 'Name Z-A') return b.name?.localeCompare(a.name||'') ?? 0;
+                  return 0;
+                })
+                .map(i => (
+                  <TableRow key={i.id}>
+                    <TableCell className="font-medium flex items-center gap-2">
+                      {i.type === 'asset' ? <Wallet className="h-4 w-4 text-green-600" /> : <CreditCard className="h-4 w-4 text-red-600" />}
+                      {i.name}
+                    </TableCell>
+                    <TableCell>{i.type === 'asset' ? 'Asset' : 'Liability'}</TableCell>
+                    <TableCell>{i.category}</TableCell>
+                    <TableCell>{formatCurrency(i.current_value ?? i.amount)}</TableCell>
+                    <TableCell className="text-right space-x-1">
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(i)}>
+                        <Edit className="h-4 w-4 text-blue-600" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(i.id)}>
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+    </Card>
+
+    {/* Add/Edit Dialog */}
       <Dialog open={open} onOpenChange={(val) => { setOpen(val); if (!val) { setEditingId(null); setName(''); setAmount(''); setCurrentValue(''); setComment(''); setCategory(''); } }}>
         <DialogContent>
           <DialogHeader>
@@ -268,64 +325,6 @@ const [bulkText, setBulkText] = useState('');
           </form>
         </DialogContent>
       </Dialog>
-
-    <Card>
-      <CardHeader>
-        <CardTitle>Your Disclosures</CardTitle>
-      </CardHeader>
-      <CardContent className="overflow-x-auto">
-        {items.length === 0 ? (
-          <div className="text-center py-6 text-muted-foreground">No disclosures yet.</div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Amount</TableHead>
-                <TableHead className="w-[120px]"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {items
-                .filter(i => {
-                  if (filterType !== 'all' && i.type !== filterType) return false;
-                  const q = searchQuery.toLowerCase();
-                  if (q && !(i.name?.toLowerCase().includes(q) || (i.comment?.toLowerCase().includes(q)))) return false;
-                  return true;
-                })
-                .sort((a,b) => {
-                  if (sortBy === 'Date ↓') return (b.created_at||0) - (a.created_at||0);
-                  if (sortBy === 'Date ↑') return (a.created_at||0) - (b.created_at||0);
-                  if (sortBy === 'Name A-Z') return a.name?.localeCompare(b.name||'') ?? 0;
-                  if (sortBy === 'Name Z-A') return b.name?.localeCompare(a.name||'') ?? 0;
-                  return 0;
-                })
-                .map(i => (
-                  <TableRow key={i.id}>
-                    <TableCell className="font-medium flex items-center gap-2">
-                      {i.type === 'asset' ? <Wallet className="h-4 w-4 text-green-600" /> : <CreditCard className="h-4 w-4 text-red-600" />}
-                      {i.name}
-                    </TableCell>
-                    <TableCell>{i.type === 'asset' ? 'Asset' : 'Liability'}</TableCell>
-                    <TableCell>{i.category}</TableCell>
-                    <TableCell>{formatCurrency(i.current_value ?? i.amount)}</TableCell>
-                    <TableCell className="text-right space-x-1">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(i)}>
-                        <Edit className="h-4 w-4 text-blue-600" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(i.id)}>
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
   </div>
 );
 }

@@ -110,12 +110,11 @@ export default function Reports() {
       {/* ── Overview Tab ── */}
       {tab === 'overview' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
             {[
               { label: 'All-time Income', value: totalIncome, color: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200' },
               { label: 'All-time Expenses', value: totalExpense, color: 'text-red-600', bg: 'bg-red-50', border: 'border-red-200' },
               { label: 'Net Savings', value: savings, color: savings >= 0 ? 'text-indigo-700' : 'text-red-600', bg: savings >= 0 ? 'bg-indigo-50' : 'bg-red-50', border: savings >= 0 ? 'border-indigo-200' : 'border-red-200' },
-              { label: 'Net Worth', value: netWorth, color: netWorth >= 0 ? 'text-indigo-700' : 'text-red-600', bg: 'bg-slate-50', border: 'border-slate-200' },
             ].map(k => (
               <div key={k.label} className={`${k.bg} border ${k.border} rounded-xl p-5`}>
                 <p className="text-xs text-muted-foreground mb-1">{k.label}</p>

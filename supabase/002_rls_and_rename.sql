@@ -23,6 +23,12 @@ DROP POLICY IF EXISTS categories_self ON public.categories;
 CREATE POLICY categories_self ON public.categories
   FOR ALL USING (uid = auth.uid()::uuid) WITH CHECK (uid = auth.uid()::uuid);
 
+-- Allow reads on categories
+CREATE POLICY "allow read categories"
+ON categories
+FOR SELECT
+USING (true);
+
 ALTER TABLE IF EXISTS public.transactions ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS transactions_self ON public.transactions;
 CREATE POLICY transactions_self ON public.transactions

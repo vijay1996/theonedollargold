@@ -14,6 +14,7 @@ import LoadingOverlay from '../components/ui/loading-overlay';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Category } from './reports/useReportsData';
 import { primaryButtonClass, secondaryButtonClass } from '../lib/constants';
+import PageHeader from '../components/layout/PageHeader';
 
 export default function Categories() {
   const [categories, setCategories] = useState<Category[]>([]);
@@ -130,13 +131,12 @@ export default function Categories() {
   return (
     <div className="space-y-6">
       <LoadingOverlay show={loading} label="Updating categories" />
-      <div className="flex items-center gap-4">
-        <h2 className="text-3xl font-bold tracking-tight">Categories</h2>
-        <p className="text-muted-foreground">Manage your income, expense, asset and liability categories.</p>
-      </div>
+      
+      <PageHeader title="Categories" description="Manage your income, expense, asset and liability categories."/>
 
-    <CardHeader>
-      <div className="flex items-center gap-4">
+      {/* Toolbar */}
+    <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b">
+      <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap">
       <Select value={sortBy} onValueChange={v => setSortBy(v as 'Name A-Z' | 'Name Z-A')}>
         <SelectTrigger className="w-[150px]">
           <SelectValue placeholder="Sort" />
@@ -149,12 +149,43 @@ export default function Categories() {
       <Button onClick={() => { setOpen(true); setBulkCategoryText(''); }} className={`flex items-center ${primaryButtonClass}`}>
         <Plus className="h-4 w-4 mr-2" /> Add
       </Button>
-      <Button onClick={() => { setBulkOpen(true); setBulkCategoryText('Enter csv formatted data here (e.g, "Groceries, expense")'); }} className={`flex items-center ${secondaryButtonClass}`}>
-        <Plus className="h-4 w-4 mr-2" /> Bulk Add
-      </Button>
     </div>
     </CardHeader>
 
+      {/* Category Table */}
+      <Card>
+        <CardContent className="overflow-x-auto">
+          {displayedCategories.length === 0 ? (
+            <div className="text-center py-6 text-muted-foreground">No categories found.</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead className="w-[120px]">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {displayedCategories.map(c => (
+                  <TableRow key={c.id}>
+                    <TableCell>{c.name}</TableCell>
+                    <TableCell>{c.type.charAt(0).toUpperCase() + c.type.slice(1)}</TableCell>
+                    <TableCell className="text-right space-x-1">
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(c)}>
+                        <Edit className="h-4 w-4 text-blue-600" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(c.id)}>
+                        <Trash2 className="h-4 w-4 text-red-500" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Add / Edit Dialog */}
         <Dialog open={open} onOpenChange={v => { setOpen(v); if (!v) resetForm(); }}>
@@ -190,83 +221,6 @@ export default function Categories() {
             </form>
           </DialogContent>
         </Dialog>
-
-        {/* Bulk Add Dialog */}
-        <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Bulk Add Categories</DialogTitle>
-            </DialogHeader>
-            <textarea className="w-full p-2 border rounded" rows={8} placeholder={bulkCategoryText} value={""} onChange={e=>setBulkCategoryText(e.target.value)}></textarea>
-            <div className="flex justify-end gap-2 mt-2">
-              <Button variant="outline" onClick={() => { setBulkOpen(false); setBulkCategoryText(''); }}>Cancel</Button>
-              <Button onClick={async () => {
-                if (!bulkCategoryText.trim()) return;
-                setLoading(true);
-                try {
-                  const user = auth.currentUser || (typeof (auth as any).getUser === 'function' ? await (auth as any).getUser() : null);
-                  const lines = bulkCategoryText.split('\n');
-                  const newCats: Category[] = [];
-                  for (const line of lines) {
-                    if (!line.trim()) continue;
-                    const [namePart, typePart] = line.split(',').map(s=>s.trim());
-                    if (!namePart || !typePart) continue;
-                    newCats.push({ id: uuidv4(), uid: user.uid, name: namePart, type: typePart as Category['type'], created_at: Date.now(), updated_at: Date.now() });
-                  }
-                  if (newCats.length===0) return;
-                  const {error} = await db.from('categories').insert(newCats);
-                  if (error) throw error;
-                  setCategories(prev=>[...prev, ...newCats]);
-                  setBulkOpen(false);
-                  setBulkCategoryText('');
-                  toast.success(`Added ${newCats.length} categories`);
-                } catch (e:any) {
-                  toast.error(e.message || 'Bulk add failed');
-                } finally { setLoading(false); }
-              }}>Upload</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-        {/* Category Table */}
-            {/* Duplicate Add/Edit Dialog removed */}
-
-      {/* Category Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Your Categories</CardTitle>
-        </CardHeader>
-        <CardContent className="overflow-x-auto">
-          {displayedCategories.length === 0 ? (
-            <div className="text-center py-6 text-muted-foreground">No categories found.</div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead className="w-[120px]">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {displayedCategories.map(c => (
-                  <TableRow key={c.id}>
-                    <TableCell>{c.name}</TableCell>
-                    <TableCell>{c.type.charAt(0).toUpperCase() + c.type.slice(1)}</TableCell>
-                    <TableCell className="text-right space-x-1">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(c)}>
-                        <Edit className="h-4 w-4 text-blue-600" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(c.id)}>
-                        <Trash2 className="h-4 w-4 text-red-500" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }

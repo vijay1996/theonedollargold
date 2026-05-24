@@ -12,6 +12,7 @@ import { Trash2, Plus } from 'lucide-react';
 import LoadingOverlay from '../components/ui/loading-overlay';
 import { CreditCard } from './reports/useReportsData';
 import { primaryButtonClass } from '../lib/constants';
+import PageHeader from '../components/layout/PageHeader';
 
 export default function CreditCards() {
   const [cards, setCards] = useState<CreditCard[]>([]);
@@ -91,33 +92,33 @@ export default function CreditCards() {
   return (
     <div className="space-y-6">
       <LoadingOverlay show={loading} label="Updating cards" />
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-3xl font-bold tracking-tight">Credit Cards</h2>
-          <p className="text-muted-foreground">Manage credit cards and due dates.</p>
+
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between pb-2 border-b">
+        <div className="flex w-full flex-col justify-between sm:flex-row sm:flex-wrap">
+          <PageHeader title="Credit Cards" description="Manage your credit cards and due dates."/>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger>
+              <Button className={`flex items-center ${primaryButtonClass}`}><Plus className="h-4 w-4 mr-2" /> Add Card</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add Credit Card</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleAdd} className="space-y-4 pt-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Card Name</label>
+                  <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. Chase Sapphire" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Due Date (Day of month)</label>
+                  <Input type="number" min="1" max="31" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required placeholder="e.g. 15" />
+                </div>
+                <Button type="submit" disabled={loading} className="w-full">Save Card</Button>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger>
-            <Button className={`flex items-center ${primaryButtonClass}`}><Plus className="h-4 w-4 mr-2" /> Add Card</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Add Credit Card</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleAdd} className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Card Name</label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. Chase Sapphire" />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Due Date (Day of month)</label>
-                <Input type="number" min="1" max="31" value={dueDate} onChange={(e) => setDueDate(e.target.value)} required placeholder="e.g. 15" />
-              </div>
-              <Button type="submit" disabled={loading} className="w-full">Save Card</Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
+      </CardHeader>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {cards.map(c => (

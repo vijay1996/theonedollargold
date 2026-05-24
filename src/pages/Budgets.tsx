@@ -14,6 +14,7 @@ import LoadingOverlay from '../components/ui/loading-overlay';
 import { useLocalization } from '../hooks/useLocalization';
 import { Budget, Category, Transaction } from './reports/useReportsData';
 import { primaryButtonClass } from '../lib/constants';
+import PageHeader from '../components/layout/PageHeader';
 
 export default function Budgets() {
   const { formatCurrency } = useLocalization();
@@ -117,52 +118,51 @@ export default function Budgets() {
   return (
     <div className="space-y-6">
       <LoadingOverlay show={loading} label="Updating budgets" />
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="min-w-0">
-          <h2 className="text-3xl font-bold tracking-tight">Budgets</h2>
-          <p className="text-muted-foreground">Track your spending limits by category.</p>
+      <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b">
+        <div className="flex w-full flex-col justify-between sm:flex-row sm:flex-wrap">
+          <PageHeader title="Budgets" description='Track your spending limits by category.'/>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger>
+              <Button className={`flex items-center ${primaryButtonClass}`}><Plus className="h-4 w-4 mr-2" /> Add Budget</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Set Budget</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleAdd} className="space-y-4 pt-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Category</label>
+                  <Select value={categoryId} onValueChange={v => setCategoryId(String(v))} required>
+                    <SelectTrigger><SelectValue placeholder="Select category">{categoryId ? getCategoryName(categoryId) : undefined}</SelectValue></SelectTrigger>
+                    <SelectContent>
+                      {categories.filter(c => c.type === 'expense').map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Limit Amount</label>
+                  <Input type="number" step="0.01" value={limit} onChange={(e) => setLimit(e.target.value)} required />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Period</label>
+                  <Select value={period} onValueChange={v => setPeriod(String(v))}>
+                    <SelectTrigger><SelectValue placeholder="Select period">{period === 'yearly' ? 'Yearly' : 'Monthly'}</SelectValue></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                      <SelectItem value="yearly">Yearly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Button type="submit" disabled={loading} className="w-full">Save Budget</Button>
+              </form>
+            </DialogContent>
+          </Dialog>
         </div>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger>
-            <Button className={`flex items-center ${primaryButtonClass}`}><Plus className="h-4 w-4 mr-2" /> Add Budget</Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Set Budget</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleAdd} className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Category</label>
-                <Select value={categoryId} onValueChange={v => setCategoryId(String(v))} required>
-                  <SelectTrigger><SelectValue placeholder="Select category">{categoryId ? getCategoryName(categoryId) : undefined}</SelectValue></SelectTrigger>
-                  <SelectContent>
-                    {categories.filter(c => c.type === 'expense').map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Limit Amount</label>
-                <Input type="number" step="0.01" value={limit} onChange={(e) => setLimit(e.target.value)} required />
-              </div>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Period</label>
-                <Select value={period} onValueChange={v => setPeriod(String(v))}>
-                  <SelectTrigger><SelectValue placeholder="Select period">{period === 'yearly' ? 'Yearly' : 'Monthly'}</SelectValue></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                    <SelectItem value="yearly">Yearly</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button type="submit" disabled={loading} className="w-full">Save Budget</Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
+      </CardHeader>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {budgets.map(b => {
           // calculate spent
           const spent = transactions.filter(t => {
