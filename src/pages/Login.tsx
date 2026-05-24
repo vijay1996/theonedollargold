@@ -13,6 +13,7 @@ export default function Login() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
   const [isRegister, setIsRegister] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -23,6 +24,7 @@ export default function Login() {
     setError('');
     try {
       if (isRegister) {
+        if (password !== confirm) throw new Error('Passwords do not match');
         const { data, error } = await db.auth.signUp({ email, password });
         if (error) throw error;
         // create profile row if needed, ensuring type consistency
@@ -35,19 +37,6 @@ export default function Login() {
         if (error) throw error;
         navigate('/finance/dashboard');
       }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleGoogle = async () => {
-    setLoading(true);
-    setError('');
-    try {
-      // Redirect to Supabase OAuth flow for Google
-      await db.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: window.location.origin + '/finance/dashboard' } });
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -74,7 +63,7 @@ export default function Login() {
               <Input
                 id="email"
                 type="email"
-                placeholder="m@example.com"
+                placeholder="e.g, m@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -86,10 +75,24 @@ export default function Login() {
                 id="password"
                 type="password"
                 value={password}
+                placeholder='e.g, Abc$1'
                 onChange={(e) => setPassword(e.target.value)}
                 required
               />
             </div>
+            {isRegister && (
+              <div className="space-y-2">
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={confirm}
+                  placeholder='Re-enter the password'
+                  onChange={(e) => setConfirm(e.target.value)}
+                  required
+                />
+              </div>
+            )}
             {error && <p className="text-sm text-red-500 font-medium">{error}</p>}
             <Button className="w-full" type="submit" disabled={loading}>
               {loading ? 'Processing...' : (isRegister ? 'Sign Up' : 'Sign In')}
@@ -106,10 +109,6 @@ export default function Login() {
               </span>
             </div>
           </div>
-          
-          <Button variant="outline" className="w-full" type="button" onClick={handleGoogle} disabled={loading}>
-            Google
-          </Button>
           
           <div className="mt-4 text-center text-sm">
             {isRegister ? 'Already have an account? ' : 'Don\'t have an account? '}
