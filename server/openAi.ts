@@ -1,9 +1,10 @@
 import OpenAi from 'openai';
 import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
+import ws from 'ws';
 dotenv.config({ path: '.env.local' });
 
-const supabase = createClient(process.env.SUPABASE_URL || '', process.env.SUPABASE_SERVICE_KEY || '');
+const supabase = createClient(process.env.SUPABASE_URL || '', process.env.SUPABASE_SERVICE_KEY || '', { realtime: { transport: ws as any } });
 
 const openai = new OpenAi({
   apiKey: process.env.OPENAI_API_KEY,

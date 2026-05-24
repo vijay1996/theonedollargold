@@ -6,6 +6,7 @@ import fs from 'fs';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
 import crons from "./server/crons";
 import getReport from "./server/openAi";
+import ws from "ws";
 
 
 // Prefer .env.local when present (common for local overrides), otherwise fall back to .env
@@ -20,7 +21,7 @@ function getSupabaseAdmin() {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
     throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_KEY in server environment');
   }
-  _supabaseAdmin = createSupabaseClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+  _supabaseAdmin = createSupabaseClient(SUPABASE_URL, SUPABASE_SERVICE_KEY, { realtime: { transport: ws as any } });
   return _supabaseAdmin;
 }
 
