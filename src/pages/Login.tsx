@@ -7,7 +7,6 @@ import { Input } from '../components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card';
 import { Label } from '../components/ui/label';
 import LoadingOverlay from '../components/ui/loading-overlay';
-import { UserProfile } from './reports/useReportsData';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -43,6 +42,23 @@ export default function Login() {
       setLoading(false);
     }
   };
+
+  const forgotPassword = async () => {
+    setLoading(true);
+    if (!email) {
+      setError('Email is required');
+      setLoading(false)
+    } else {
+      auth.sendPasswordResetEmail(email).then(() => {
+        setError('Email Sent.')
+      }).catch((error: any) => {
+        setError(error.message);
+      }).finally(() => {
+        setLoading(false)
+      })
+    }
+    
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -110,13 +126,28 @@ export default function Login() {
             </div>
           </div>
           
-          <div className="mt-4 text-center text-sm">
+          <div className="text-center text-sm">
             {isRegister ? 'Already have an account? ' : 'Don\'t have an account? '}
             <button
               onClick={() => setIsRegister(!isRegister)}
-              className="underline underline-offset-4 hover:text-primary font-medium"
+              className="underline underline-offset-4 hover:text-primary font-medium cursor-pointer"
             >
               {isRegister ? 'Sign in' : 'Sign up'}
+            </button>
+          </div>
+
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <span className="w-full border-t" />
+            </div>
+          </div>
+
+          <div className="p-4 text-center text-sm">
+            <button 
+              className='text-body bg-neutral-secondary-medium box-border border border-default-medium hover:bg-neutral-tertiary-medium hover:text-heading focus:ring-4 focus:ring-neutral-tertiary shadow-xs font-medium leading-5 rounded-full text-sm px-4 py-2.5 focus:outline-none cursor-pointer'
+              onClick={forgotPassword}
+            >
+              Forgot password?
             </button>
           </div>
         </CardContent>

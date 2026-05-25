@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { redirect } from 'react-router';
 import ws from 'ws';
 
 
@@ -32,6 +33,14 @@ async function ensureUserProfile(u: any) {
 		updated_at: Date.now()
 	}]);
 	if (error) throw error;
+}
+
+interface AuthType {
+	currentUser: any;
+	getUser(): Promise<any>;
+	onAuthStateChanged(cb: (user: any) => void): () => void;
+	sendPasswordResetEmail(email: string): Promise<void>;
+	confirmPasswordReset(password: string): Promise<void>;
 }
 
 // Small auth adapter to keep existing callers working with `auth.currentUser`
@@ -76,6 +85,14 @@ export const auth: any = {
 			}
 		});
 		return () => data.subscription.unsubscribe();
+	},
+	async sendPasswordResetEmail (email: string) {
+		const { error } = await supabase.auth.resetPasswordForEmail(email, {redirectTo: `${window.location.origin}/reset-password`});
+		if (error) throw error;
+	},
+	async confirmPasswordReset (password: string) {
+		const { error } = await supabase.auth.updateUser({password}, { emailRedirectTo: `${window.location.origin}/login`});
+		if (error) throw error;
 	}
 };
 

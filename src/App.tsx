@@ -20,6 +20,7 @@ import CreditCards from './pages/CreditCards';
 import Profile from './pages/Profile';
 import Assets from './pages/Assets';
 import Reports from './pages/reports/Reports';
+import ResetPassword from './pages/ResetPassword';
 
 function ProtectedRoute({ user, loading }: { user: any; loading: boolean }) {
   if (loading) {
@@ -56,6 +57,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={!loading && user ? <Navigate to="/finance/dashboard" /> : <Login />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           
           <Route path="/finance" element={<ProtectedRoute user={user} loading={loading} />}>
             <Route element={<AppLayout />}>

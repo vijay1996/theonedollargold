@@ -130,7 +130,7 @@ export default function CreditCards() {
               </Button>
             </CardHeader>
             <CardContent>
-                <p className="break-words text-xl font-bold sm:text-2xl">Due on the { c.due_date }{c.due_date === 1 ? 'st' : c.due_date === 2 ? 'nd' : c.due_date === 3 ? 'rd' : 'th'}</p>
+                <p className="wrap-break-word text-xl font-bold sm:text-2xl">Due on the { c.due_date }{c.due_date === 1 ? 'st' : c.due_date === 2 ? 'nd' : c.due_date === 3 ? 'rd' : 'th'}</p>
             </CardContent>
           </Card>
         ))}

@@ -226,7 +226,7 @@ export default function Subscriptions() {
               </Button>
             </CardHeader>
             <CardContent>
-              <div className="break-words text-2xl font-bold tracking-tight mb-2">{formatCurrency(s.amount)}</div>
+              <div className="wrap-break-word text-2xl font-bold tracking-tight mb-2">{formatCurrency(s.amount)}</div>
               <p className="text-sm text-muted-foreground">{s.frequency} on day {s.deduction_date}</p>
               <p className="text-xs text-muted-foreground mt-1">Category: {getCategoryName(s.category_id)}</p>
             </CardContent>

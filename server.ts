@@ -12,14 +12,6 @@ import ws from "ws";
 const envPath = fs.existsSync('.env.local') ? '.env.local' : (fs.existsSync('.env') ? '.env' : undefined);
 dotenv.config(envPath ? { path: envPath } : undefined);
 
-console.log('ENV CHECK:', {
-    PORT: process.env.PORT,
-    SUPABASE_URL: process.env.SUPABASE_URL ? '✓ set' : '✗ missing',
-    VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ? '✓ set' : '✗ missing',
-    OPENAI_API_KEY: process.env.OPENAI_API_KEY ? '✓ set' : '✗ missing',
-    NODE_ENV: process.env.NODE_ENV,
-});
-
 let _supabaseAdmin: any | null = null;
 function getSupabaseAdmin() {
   if (_supabaseAdmin) return _supabaseAdmin;
