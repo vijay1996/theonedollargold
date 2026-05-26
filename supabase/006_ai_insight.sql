@@ -9,6 +9,11 @@ CREATE TABLE IF NOT EXISTS public.ai_insight (
   generatedAt text
 );
 
+ALTER TABLE IF EXISTS public.ai_insight ADD COLUMN created_at bigint;
+ALTER TABLE IF EXISTS public.ai_insight DROP COLUMN generatedAt;
+ALTER TABLE IF EXISTS public.ai_insight ADD COLUMN title text;
+
+
 ALTER TABLE IF EXISTS public.ai_insight ENABLE ROW LEVEL SECURITY;
 
 -- Drop any existing policy and recreate to ensure idempotence

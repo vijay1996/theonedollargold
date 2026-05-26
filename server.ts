@@ -4,8 +4,9 @@ import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import fs from 'fs';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
-import crons from "./server/crons";
 import ws from "ws";
+import getReport from "./server/openAi";
+import crons from "./server/crons";
 
 
 // Prefer .env.local when present (common for local overrides), otherwise fall back to .env
@@ -44,6 +45,14 @@ async function startServer() {
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
   });
+
+  app.post('/api/generate-ai-insight', (req, res) => {
+    getReport(req.body.uid, req.body.title).then(() => {
+      res.json({ status: 'ok' });
+    }).catch(err => {
+      res.status(500).json({ error: String(err) });
+    });
+  })
 
 
   // Process subscription deductions for today: create transactions for subscriptions due today

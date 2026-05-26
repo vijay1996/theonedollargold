@@ -19,3 +19,5 @@ CREATE POLICY "users_update_self" ON public.users
   FOR UPDATE
   USING (uid = auth.uid())
   WITH CHECK (uid = auth.uid());
+
+ALTER TABLE IF EXISTS public.users ADD COLUMN ai_report_tries numeric;

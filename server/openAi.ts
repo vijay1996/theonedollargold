@@ -38,16 +38,18 @@ const content = `
 
 `;
 
-export default async function getReport() {
+export default async function getReport(uid: string, title: string) {
     const supabase = getSupabaseClient();
-    const users = await getUsers(supabase);
-    if (!users?.length) return console.log('No users found');
-
-    for (const uid of users) {
-        const [transactions, assetsAndLiabilities] = await Promise.all([
+    const [user, transactions, assetsAndLiabilities] = await Promise.all([
+            getUser(uid, supabase),
             getTransactions(uid, supabase),
             getAssetsAndLiabilities(uid, supabase)
         ]);
+
+        if (user.ai_report_tries < 1) {
+            throw "You have exhausted your AI report generation quota"
+            return;
+        }
 
         const data = { transactions, assetsAndLiabilities };
 
@@ -68,15 +70,25 @@ export default async function getReport() {
             positives: JSON.stringify(positives), 
             overall_health_score: overallHealthScore, 
             summary,
-            generatedat: new Date().toISOString().split('T')[0]
+            created_at: Date.now(),
+            title
         }).then(({data, error}) => {
             if (error) {
                 console.error('Supabase error:', error);
                 return;
             }
-            console.log(`✓ Report written for user ${uid}`);
+            supabase
+                .from('users')
+                .update({ ai_report_tries: user.ai_report_tries - 1 })
+                .eq('uid', uid)
+            .then(({data, error}) => {
+                if (!error) {
+                    console.log(`✓ Report written for user ${uid}`);
+                } else {
+                    console.error('Supabase error:', error);
+                }
+            });
         })
-    }
 }
 
 async function getTransactions(userId: string, supabase: ReturnType<typeof getSupabaseClient>) {
@@ -122,15 +134,15 @@ async function getAssetsAndLiabilities(userId: string, supabase: ReturnType<type
     return formattedData;
 }
 
-async function getUsers(supabase: ReturnType<typeof getSupabaseClient>) {
-    const { data, error } = await supabase.from('users').select('*');
+async function getUser(userId: string, supabase: ReturnType<typeof getSupabaseClient>) {
+    const { data, error } = await supabase.from('users').select('*').filter('uid', 'eq', userId);
     if (error) console.error('Supabase error:', error);
-    return data?.map(user => user.uid);
+    if (!data?.length) return null;
+    return data[0];
 }
 
 function safeParseReport(raw: string) {
     // Strip markdown code fences if model wraps in ```json
-    console.log(raw);
     const cleaned = raw.replace(/^```json\n?/, '').replace(/```$/, '').trim();
     try {
         return JSON.parse(cleaned);

@@ -52,6 +52,7 @@ export default function App() {
 
   return (
     <>
+      <Toaster position='top-center' />
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Landing />} />
@@ -68,6 +69,7 @@ export default function App() {
               <Route path="subscriptions" element={<Subscriptions />} />
               <Route path="cards" element={<CreditCards />} />
               <Route path="reports" element={<Reports />} />
+              <Route path="reports/:tab" element={<Reports />} />
               <Route path="profile" element={<Profile />} />
             </Route>
           </Route>

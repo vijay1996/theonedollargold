@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, TrendingUp, Wallet, PieChart, BarChart2, FileText } from 'lucide-react';
+import { Download, TrendingUp, Wallet, PieChart, BarChart2, FileText, Binoculars } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { subMonths, startOfMonth, endOfMonth } from 'date-fns';
 import { Button } from '../../components/ui/button';
@@ -12,12 +12,16 @@ import { IncomeExpenseTab } from './IncomeExpenseTab';
 import { AssetsNetWorthTab } from './AssetsNetWorthTab';
 import { BudgetsTab } from './BudgetsTab';
 import { FinancialStatementsTab } from './FinancialStatementsTab';
+import AiInsight from './AiInsight';
+import { useParams } from 'react-router';
+import { v4 as uuidv4 } from 'uuid';
 
 const TABS = [
   { id: 'income', label: 'Income & Expenses', icon: TrendingUp },
   { id: 'assets', label: 'Assets & Net Worth', icon: Wallet },
   { id: 'budgets', label: 'Budgets & Categories', icon: PieChart },
   { id: 'statements', label: 'Financial Statements', icon: FileText },
+  { id: 'ai', label: 'AI Insight', icon: Binoculars }
 ];
 
 // Default: last 6 months
@@ -27,10 +31,12 @@ const defaultRange: DateRange = {
 };
 
 export default function Reports() {
+  const { tab: tabParams } = useParams();
   const { formatCurrency, formatDate } = useLocalization();
   const data = useReportsData();
-  const [tab, setTab] = useState('overview');
+  const [tab, setTab] = useState(tabParams || 'overview');
   const [dateRange, setDateRange] = useState<DateRange | undefined>(defaultRange);
+  const [aiGenKey, setAiGenKey] = useState(uuidv4())
 
   // Derive a numeric months-like range string for child tabs that need it
   // We pass the actual Date objects to child tabs instead
@@ -109,7 +115,7 @@ export default function Reports() {
 
       {/* ── Overview Tab ── */}
       {tab === 'overview' && (
-        <div className="space-y-6">
+        <div key={uuidv4()} className="space-y-6">
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
             {[
               { label: 'All-time Income', value: totalIncome, color: 'text-green-700', bg: 'bg-green-50', border: 'border-green-200' },
@@ -158,10 +164,11 @@ export default function Reports() {
         </div>
       )}
 
-      {tab === 'income'     && <IncomeExpenseTab data={data} from={rangeFrom} to={rangeTo} />}
-      {tab === 'assets'     && <AssetsNetWorthTab data={data} from={rangeFrom} to={rangeTo} />}
-      {tab === 'budgets'    && <BudgetsTab data={data} />}
-      {tab === 'statements' && <FinancialStatementsTab data={data} />}
+      {tab === 'income'     && <IncomeExpenseTab data={data} from={rangeFrom} to={rangeTo} key={uuidv4()} />}
+      {tab === 'assets'     && <AssetsNetWorthTab data={data} from={rangeFrom} to={rangeTo} key={uuidv4()} />}
+      {tab === 'budgets'    && <BudgetsTab data={data} key={uuidv4()} />}
+      {tab === 'statements' && <FinancialStatementsTab key={uuidv4()} data={data} />}
+      {tab === 'ai' && <AiInsight key={aiGenKey} onGenerated={() => setAiGenKey(uuidv4())} />}
     </div>
   );
 }

@@ -28,9 +28,7 @@ var import_vite = require("vite");
 var import_dotenv2 = __toESM(require("dotenv"), 1);
 var import_fs = __toESM(require("fs"), 1);
 var import_supabase_js2 = require("@supabase/supabase-js");
-
-// server/crons.ts
-var import_node_cron = __toESM(require("node-cron"), 1);
+var import_ws2 = __toESM(require("ws"), 1);
 
 // server/openAi.ts
 var import_openai = __toESM(require("openai"), 1);
@@ -69,41 +67,49 @@ var content = `
     Here are my transactions, assets and liabilities -
 
 `;
-async function getReport() {
+async function getReport(uid, title) {
   const supabase = getSupabaseClient();
-  const users = await getUsers(supabase);
-  if (!users?.length) return console.log("No users found");
-  for (const uid of users) {
-    const [transactions, assetsAndLiabilities] = await Promise.all([
-      getTransactions(uid, supabase),
-      getAssetsAndLiabilities(uid, supabase)
-    ]);
-    const data = { transactions, assetsAndLiabilities };
-    const response = await openai.chat.completions.create({
-      model: "gpt-4.1-nano",
-      messages: [{ role: "system", content: content + JSON.stringify(data) }]
-    });
-    const raw = response.choices[0].message.content || "{}";
-    const { redFlags, suggestions, positives, overallHealthScore, summary } = safeParseReport(raw);
-    const { v4: uuidv4 } = await import("uuid");
-    const reportId = uuidv4();
-    supabase.from("ai_insight").upsert({
-      id: reportId,
-      uid,
-      red_flags: JSON.stringify(redFlags),
-      suggestions: JSON.stringify(suggestions),
-      positives: JSON.stringify(positives),
-      overall_health_score: overallHealthScore,
-      summary,
-      generatedat: (/* @__PURE__ */ new Date()).toISOString().split("T")[0]
-    }).then(({ data: data2, error }) => {
-      if (error) {
-        console.error("Supabase error:", error);
-        return;
-      }
-      console.log(`\u2713 Report written for user ${uid}`);
-    });
+  const [user, transactions, assetsAndLiabilities] = await Promise.all([
+    getUser(uid, supabase),
+    getTransactions(uid, supabase),
+    getAssetsAndLiabilities(uid, supabase)
+  ]);
+  if (user.ai_report_tries < 1) {
+    throw "You have exhausted your AI report generation quota";
+    return;
   }
+  const data = { transactions, assetsAndLiabilities };
+  const response = await openai.chat.completions.create({
+    model: "gpt-4.1-nano",
+    messages: [{ role: "system", content: content + JSON.stringify(data) }]
+  });
+  const raw = response.choices[0].message.content || "{}";
+  const { redFlags, suggestions, positives, overallHealthScore, summary } = safeParseReport(raw);
+  const { v4: uuidv4 } = await import("uuid");
+  const reportId = uuidv4();
+  supabase.from("ai_insight").upsert({
+    id: reportId,
+    uid,
+    red_flags: JSON.stringify(redFlags),
+    suggestions: JSON.stringify(suggestions),
+    positives: JSON.stringify(positives),
+    overall_health_score: overallHealthScore,
+    summary,
+    created_at: Date.now(),
+    title
+  }).then(({ data: data2, error }) => {
+    if (error) {
+      console.error("Supabase error:", error);
+      return;
+    }
+    supabase.from("users").update({ ai_report_tries: user.ai_report_tries - 1 }).eq("uid", uid).then(({ data: data3, error: error2 }) => {
+      if (!error2) {
+        console.log(`\u2713 Report written for user ${uid}`);
+      } else {
+        console.error("Supabase error:", error2);
+      }
+    });
+  });
 }
 async function getTransactions(userId, supabase) {
   const { data, error } = await supabase.from("transactions").select("*, categories(name)").eq("uid", userId);
@@ -146,13 +152,13 @@ async function getAssetsAndLiabilities(userId, supabase) {
   });
   return formattedData;
 }
-async function getUsers(supabase) {
-  const { data, error } = await supabase.from("users").select("*");
+async function getUser(userId, supabase) {
+  const { data, error } = await supabase.from("users").select("*").filter("uid", "eq", userId);
   if (error) console.error("Supabase error:", error);
-  return data?.map((user) => user.uid);
+  if (!data?.length) return null;
+  return data[0];
 }
 function safeParseReport(raw) {
-  console.log(raw);
   const cleaned = raw.replace(/^```json\n?/, "").replace(/```$/, "").trim();
   try {
     return JSON.parse(cleaned);
@@ -164,26 +170,18 @@ function safeParseReport(raw) {
 }
 
 // server/crons.ts
+var import_node_cron = __toESM(require("node-cron"), 1);
 function crons() {
   console.log("Starting crons...");
   import_node_cron.default.schedule("0 0 2 * *", () => {
     console.log("Runs on 2nd midnight every month...");
-    getReport().catch((err) => console.error("getReport cron error:", err));
   });
   console.log("Crons started.");
 }
 
 // server.ts
-var import_ws2 = __toESM(require("ws"), 1);
 var envPath = import_fs.default.existsSync(".env.local") ? ".env.local" : import_fs.default.existsSync(".env") ? ".env" : void 0;
 import_dotenv2.default.config(envPath ? { path: envPath } : void 0);
-console.log("ENV CHECK:", {
-  PORT: process.env.PORT,
-  SUPABASE_URL: process.env.SUPABASE_URL ? "\u2713 set" : "\u2717 missing",
-  VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ? "\u2713 set" : "\u2717 missing",
-  OPENAI_API_KEY: process.env.OPENAI_API_KEY ? "\u2713 set" : "\u2717 missing",
-  NODE_ENV: process.env.NODE_ENV
-});
 var _supabaseAdmin = null;
 function getSupabaseAdmin() {
   if (_supabaseAdmin) return _supabaseAdmin;
@@ -202,6 +200,13 @@ async function startServer() {
   app.use(import_express.default.urlencoded({ limit: "50mb", extended: true }));
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok" });
+  });
+  app.post("/api/generate-ai-insight", (req, res) => {
+    getReport(req.body.uid, req.body.title).then(() => {
+      res.json({ status: "ok" });
+    }).catch((err) => {
+      res.status(500).json({ error: String(err) });
+    });
   });
   app.post("/api/process-subscription-deductions", async (req, res) => {
     const { v4: uuidv4 } = await import("uuid");
