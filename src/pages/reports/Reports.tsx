@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, TrendingUp, Wallet, PieChart, BarChart2, FileText } from 'lucide-react';
+import { Download, TrendingUp, Wallet, PieChart, BarChart2, FileText, Binoculars } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { subMonths, startOfMonth, endOfMonth } from 'date-fns';
 import { Button } from '../../components/ui/button';
@@ -19,6 +19,7 @@ const TABS = [
   { id: 'assets', label: 'Assets & Net Worth', icon: Wallet },
   { id: 'budgets', label: 'Budgets & Categories', icon: PieChart },
   { id: 'statements', label: 'Financial Statements', icon: FileText },
+  { id: 'ai', label: 'AI Insights', icon: Binoculars },
 ];
 
 // Default: last 6 months
@@ -32,6 +33,7 @@ export default function Reports() {
   const data = useReportsData();
   const [tab, setTab] = useState('overview');
   const [dateRange, setDateRange] = useState<DateRange | undefined>(defaultRange);
+  const [ aiInsightKey, setAiInsightKey ] = useState(0); // Used to force re-rendering of AI Insight tab when date range changes
 
   // Derive a numeric months-like range string for child tabs that need it
   // We pass the actual Date objects to child tabs instead
@@ -163,7 +165,7 @@ export default function Reports() {
       {tab === 'assets'     && <AssetsNetWorthTab data={data} from={rangeFrom} to={rangeTo} />}
       {tab === 'budgets'    && <BudgetsTab data={data} />}
       {tab === 'statements' && <FinancialStatementsTab data={data} />}
-      {tab === 'ai' && <AiInsight />}
+      {tab === 'ai' && <AiInsight key={aiInsightKey} refresh={() => setAiInsightKey(aiInsightKey + 1)} />}
     </div>
   );
 }

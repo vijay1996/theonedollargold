@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { auth, db, serverUrl } from "@/src/lib/firebase";
 import { toast } from "sonner";
-import { v4 as uuidv4 } from "uuid"
 
 type Report = {
     id: string;
@@ -46,7 +45,7 @@ const IMPACT_STYLES: Record<string, { bg: string; text: string; badge: string }>
     low:    { bg: "#f0fdf4", text: "#166534", badge: "#86efac" },
 };
 
-export default function AiInsight() {
+export default function AiInsight({refresh}: { refresh: () => void }) {
 
     const [reportList, setReportList]     = useState<Report[]>([]);
     const [filtered, setFiltered]         =useState<Report[]>([]);
@@ -54,7 +53,6 @@ export default function AiInsight() {
     const [searchTerm, setSearchTerm]     = useState("");
     const [tries, setTries]               = useState<number>(0);
     const [generating, setGenerating]     = useState(false);
-    const [refresh, setRefresh]           = useState(uuidv4());
 
     const fetchRetries = async () => {
         const data = await db.from('users').select('ai_report_tries').eq('uid', auth.currentUser?.uid)
@@ -89,7 +87,7 @@ export default function AiInsight() {
             const data = await res.json();
             if (!data.error) {
                 toast.success("Report generated!");
-                await fetchReportList();
+                refresh();
             } else {
                 toast.error(data.error || "Could not generate report.");
             }
