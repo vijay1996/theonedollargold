@@ -21,3 +21,4 @@ CREATE POLICY "users_update_self" ON public.users
   WITH CHECK (uid = auth.uid());
 
 ALTER TABLE IF EXISTS public.users ADD COLUMN ai_report_tries numeric;
+ALTER TABLE IF EXISTS public.users ALTER COLUMN ai_report_tries SET DEFAULT 3;
