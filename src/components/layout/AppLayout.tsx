@@ -53,7 +53,7 @@ export function AppLayout() {
     <>
       <div className="p-4 flex items-center gap-2 text-white font-semibold text-lg border-b border-slate-800">
         <Wallet className="h-6 w-6 text-indigo-400" />
-        <Link to={"/"}><span>OneDollarGold</span></Link>
+        <Link to={"/"}><span>TheOneDollarGold</span></Link>
       </div>
       <nav className="flex-1 py-4 overflow-y-auto">
         <div className="space-y-6">
@@ -101,7 +101,7 @@ export function AppLayout() {
       <div className="md:hidden flex items-center justify-between p-4 bg-slate-900 border-b border-slate-800">
         <div className="flex items-center gap-2 text-white font-semibold text-lg">
           <Wallet className="h-6 w-6 text-indigo-400" />
-          <span>OneDollarGold</span>
+          <span>TheOneDollarGold</span>
         </div>
         <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
           <SheetTrigger render={<Button variant="ghost" size="icon" className="text-white hover:bg-slate-800 hover:text-white" />}>

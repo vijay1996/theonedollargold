@@ -1,4 +1,4 @@
-Supabase setup for OneDollarGold
+Supabase setup for TheOneDollarGold
 ================================
 
 What this file contains

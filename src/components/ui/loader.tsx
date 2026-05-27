@@ -19,7 +19,7 @@ export default function Loader({ size = 16, label = 'Loading...' }: LoaderProps)
       <div className="flex flex-col items-center gap-1.5 text-center">
         <div className="flex items-center gap-2 text-white">
           <Wallet className="h-4 w-4 text-indigo-400" strokeWidth={2} aria-hidden />
-          <span className="text-base font-semibold tracking-tight">OneDollarGold</span>
+          <span className="text-base font-semibold tracking-tight">TheOneDollarGold</span>
         </div>
         {label && <div className="text-sm font-medium text-white/80">{label}</div>}
       </div>

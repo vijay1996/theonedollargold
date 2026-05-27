@@ -11,7 +11,7 @@ export default function Landing() {
       <nav className="flex items-center justify-between p-6 max-w-7xl mx-auto">
         <div className="flex items-center gap-2">
           <Wallet className="h-8 w-8 text-indigo-400" />
-          <span className="text-xl font-bold tracking-tight">OneDollarGold</span>
+          <span className="text-xl font-bold tracking-tight">TheOneDollarGold</span>
         </div>
         <div className="flex items-center gap-4">
           <Link to="/login">
@@ -44,7 +44,7 @@ export default function Landing() {
                 The Ecosystem for <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 to-purple-400">Financial Mastery</span>
               </h1>
               <p className="mt-6 text-lg leading-8 text-slate-400 max-w-2xl mx-auto">
-                OneDollarGold is the premier ecosystem of tools and applications designed to help you build, track, and master your wealth. 
+                TheOneDollarGold is the premier ecosystem of tools and applications designed to help you build, track, and master your wealth. 
               </p>
               <div className="mt-10 flex items-center justify-center gap-x-6">
                 <Link to="/finance/dashboard">
@@ -77,7 +77,7 @@ export default function Landing() {
                 <ExternalLink className="h-5 w-5 text-slate-500 opacity-0 group-hover:opacity-100 transition-opacity" />
               </div>
               <h3 className="text-xl font-semibold text-white mb-2 flex items-center gap-2">
-                OneDollarGold Finance <span className="text-xs font-semibold px-2 py-1 bg-indigo-500/10 text-indigo-400 rounded-full">Live</span>
+                TheOneDollarGold Finance <span className="text-xs font-semibold px-2 py-1 bg-indigo-500/10 text-indigo-400 rounded-full">Live</span>
               </h3>
               <p className="text-slate-400">
                 Track your net worth, manage budgets, analyze spending, and monitor your subscriptions all in one powerful dashboard.
@@ -95,7 +95,7 @@ export default function Landing() {
                 <Shield className="h-6 w-6 text-slate-400" />
               </div>
               <h3 className="text-xl font-semibold text-slate-300 mb-2">
-                OneDollarGold Returns
+                TheOneDollarGold Returns
               </h3>
               <p className="text-slate-500">
                 A new era of investment tracking and portfolio analysis. Keep an eye on our ecosystem for future releases.
@@ -110,7 +110,7 @@ export default function Landing() {
         <div className="max-w-7xl mx-auto px-6 text-center text-slate-500 text-sm flex flex-col items-center justify-center">
           <div className="flex items-center gap-2 mb-4 opacity-50">
             <Wallet className="h-5 w-5 text-slate-400" />
-            <span className="font-semibold text-slate-300">OneDollarGold</span>
+            <span className="font-semibold text-slate-300">TheOneDollarGold</span>
           </div>
           <p>© {new Date().getFullYear()} The One Dollar Gold. All rights reserved.</p>
         </div>
