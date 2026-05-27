@@ -6,3 +6,8 @@ coverage/
 *.log
 .env*
 !.env.example
+test-results/
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
