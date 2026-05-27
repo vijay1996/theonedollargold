@@ -46,7 +46,7 @@ const IMPACT_STYLES: Record<string, { bg: string; text: string; badge: string }>
     low:    { bg: "#f0fdf4", text: "#166534", badge: "#86efac" },
 };
 
-export default function AiInsight({onGenerated} : {onGenerated: () => void}) {
+export default function AiInsight() {
 
     const [reportList, setReportList]     = useState<Report[]>([]);
     const [filtered, setFiltered]         =useState<Report[]>([]);

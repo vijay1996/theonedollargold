@@ -12,6 +12,7 @@ import { IncomeExpenseTab } from './IncomeExpenseTab';
 import { AssetsNetWorthTab } from './AssetsNetWorthTab';
 import { BudgetsTab } from './BudgetsTab';
 import { FinancialStatementsTab } from './FinancialStatementsTab';
+import AiInsight from './AiInsight';
 
 const TABS = [
   { id: 'income', label: 'Income & Expenses', icon: TrendingUp },
@@ -162,6 +163,7 @@ export default function Reports() {
       {tab === 'assets'     && <AssetsNetWorthTab data={data} from={rangeFrom} to={rangeTo} />}
       {tab === 'budgets'    && <BudgetsTab data={data} />}
       {tab === 'statements' && <FinancialStatementsTab data={data} />}
+      {tab === 'ai' && <AiInsight />}
     </div>
   );
 }
