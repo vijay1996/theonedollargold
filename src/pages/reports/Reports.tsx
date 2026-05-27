@@ -5,7 +5,8 @@ import { subMonths, startOfMonth, endOfMonth } from 'date-fns';
 import { Button } from '../../components/ui/button';
 import { DateRangePicker } from '../../components/ui/date-range-picker';
 import LoadingOverlay from '../../components/ui/loading-overlay';
-import { exportToCSV } from '../../lib/exportCSV';
+import { exportToPDF } from '../../lib/exportPDF';
+import { auth, db } from '../../lib/firebase';
 import { useLocalization } from '../../hooks/useLocalization';
 import { useReportsData } from './useReportsData';
 import { IncomeExpenseTab } from './IncomeExpenseTab';
@@ -40,19 +41,43 @@ export default function Reports() {
   const rangeFrom = dateRange?.from ?? defaultRange.from!;
   const rangeTo = dateRange?.to ?? defaultRange.to!;
 
-  const handleExport = () => {
-    const rows = data.transactions
-      .filter(t => {
-        const d = new Date(t.date);
-        return d >= rangeFrom && d <= rangeTo;
-      })
-      .map(t => ({
-        Date: formatDate(t.date),
-        Type: t.type,
-        Amount: t.amount,
-        Comment: t.comment || '',
-      }));
-    exportToCSV(rows, `report_${formatDate(rangeFrom)}_to_${formatDate(rangeTo)}.csv`);
+  const handleExport = async () => {
+    // Fetch the first (most recent) AI insight report, if available
+    let aiReport = null;
+    try {
+      const uid = auth.currentUser?.uid;
+      if (uid) {
+        const { data: aiData } = await db
+          .from('ai_insight')
+          .select('*')
+          .eq('uid', uid)
+          .order('created_at', { ascending: false })
+          .limit(1);
+        if (aiData && aiData.length > 0) {
+          aiReport = aiData[0] as {
+            title: string;
+            summary: string;
+            overall_health_score: number;
+            red_flags: string;
+            suggestions: string;
+            positives: string;
+            created_at: number;
+          };
+        }
+      }
+    } catch {
+      // AI report is optional; continue even if fetch fails
+    }
+
+    await exportToPDF(
+      data,
+      rangeFrom,
+      rangeTo,
+      formatCurrency,
+      formatDate,
+      aiReport,
+      `financial_report_${formatDate(rangeFrom)}_to_${formatDate(rangeTo)}.pdf`,
+    );
   };
 
   const totalIncome = data.transactions.filter(t => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);

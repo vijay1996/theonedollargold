@@ -4,8 +4,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card'
 import { Button } from '../components/ui/button';
 import { format, subMonths } from 'date-fns';
 import { handleFirestoreError, OperationType } from '../lib/firestoreAuthError';
-import { exportToCSV } from '../lib/exportCSV';
-import { Download, Wallet, CreditCard as CCIcon, TrendingUp, TrendingDown, HandMetal, Coins, House, Car } from 'lucide-react';
+import { Wallet, CreditCard as CCIcon, TrendingUp, TrendingDown, HandMetal, Coins, House, Car } from 'lucide-react';
 import LoadingOverlay from '../components/ui/loading-overlay';
 import { useLocalization } from '../hooks/useLocalization';
 import { Transaction, Subscription, CreditCard, Category, Disclosure } from './reports/useReportsData';
@@ -166,17 +165,6 @@ export default function Dashboard() {
   const totalIncome = chartData[chartData.length - 1]?.income || 0;
   const totalExpense = chartData[chartData.length - 1]?.expense || 0;
 
-  const handleExport = () => {
-    const data = transactions.map(t => ({
-      Date: formatDate(t.date),
-      Category: getCategoryName(t.category_id || ''),
-      Type: t.type,
-      Amount: t.amount,
-      Comment: t.comment || ''
-    }));
-    exportToCSV(data, 'transactions.csv');
-  };
-
   return (
     <div className="space-y-4">
       <LoadingOverlay show={loading} label="Loading dashboard" />
@@ -185,9 +173,7 @@ export default function Dashboard() {
           <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
           <p className="text-sm text-muted-foreground mt-1">Your financial overview at a glance</p>
         </div>
-        <div className="flex w-full items-center gap-2 sm:w-auto">
-          <Button variant="outline" onClick={handleExport} className="w-full sm:w-auto"><Download className="h-4 w-4 mr-2"/> Export</Button>
-        </div>
+        <div />
       </div>
       
 
