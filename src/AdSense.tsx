@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getUserSubscriptionInfo, isPremium } from "./lib/razorpay";
 
-export default function Header() {
+export default function Adsense() {
   const [subInfo, setSubInfo] = useState<any>(null);
 
   useEffect(() => {
