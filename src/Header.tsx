@@ -19,10 +19,10 @@ export default function Header() {
       "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6748935947885860";
     script.async = true;
     script.crossOrigin = "anonymous";
-    document.head.appendChild(script);
+    document.getElementsByTagName('head')[0].appendChild(script);
 
     return () => {
-      document.head.removeChild(script);
+      document.getElementsByTagName('head')[0].removeChild(script);
     };
   }, [subInfo]);
 
