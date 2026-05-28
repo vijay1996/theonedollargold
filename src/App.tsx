@@ -5,7 +5,7 @@
 
 import { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, Outlet } from 'react-router';
-import { auth } from './lib/firebase';
+import { auth, serverUrl } from './lib/firebase';
 import { AppLayout } from './components/layout/AppLayout';
 import { Toaster } from './components/ui/sonner';
 import Loader from './components/ui/loader';
@@ -21,6 +21,7 @@ import Profile from './pages/Profile';
 import Assets from './pages/Assets';
 import Reports from './pages/reports/Reports';
 import Upgrade from './pages/Upgrade';
+import Health from './pages/Health';
 
 function ProtectedRoute({ user, loading }: { user: any; loading: boolean }) {
   if (loading) {
@@ -57,6 +58,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={!loading && user ? <Navigate to="/finance/dashboard" /> : <Login />} />
+          <Route path="/health" element={<Health />} />
           
           <Route path="/finance" element={<ProtectedRoute user={user} loading={loading} />}>
             <Route element={<AppLayout />}>
