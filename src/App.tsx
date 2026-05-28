@@ -20,6 +20,7 @@ import CreditCards from './pages/CreditCards';
 import Profile from './pages/Profile';
 import Assets from './pages/Assets';
 import Reports from './pages/reports/Reports';
+import Upgrade from './pages/Upgrade';
 
 function ProtectedRoute({ user, loading }: { user: any; loading: boolean }) {
   if (loading) {
@@ -69,6 +70,7 @@ export default function App() {
               <Route path="cards" element={<CreditCards />} />
               <Route path="reports" element={<Reports />} />
               <Route path="profile" element={<Profile />} />
+              <Route path="upgrade" element={<Upgrade />} />
             </Route>
           </Route>
         </Routes>

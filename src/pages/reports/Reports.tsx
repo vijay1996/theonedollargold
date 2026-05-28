@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { Download, TrendingUp, Wallet, PieChart, BarChart2, FileText, Binoculars } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Link } from 'react-router';
+import { Download, TrendingUp, Wallet, PieChart, BarChart2, FileText, Binoculars, Crown, Sparkles, ArrowRight } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { subMonths, startOfMonth, endOfMonth } from 'date-fns';
 import { Button } from '../../components/ui/button';
@@ -9,6 +10,8 @@ import { exportToPDF } from '../../lib/exportPDF';
 import { auth, db } from '../../lib/firebase';
 import { useLocalization } from '../../hooks/useLocalization';
 import { useReportsData } from './useReportsData';
+import { getUserSubscriptionInfo, isPremium } from '../../lib/razorpay';
+import type { SubscriptionInfo } from '../../lib/razorpay';
 import { IncomeExpenseTab } from './IncomeExpenseTab';
 import { AssetsNetWorthTab } from './AssetsNetWorthTab';
 import { BudgetsTab } from './BudgetsTab';
@@ -35,6 +38,13 @@ export default function Reports() {
   const [tab, setTab] = useState('overview');
   const [dateRange, setDateRange] = useState<DateRange | undefined>(defaultRange);
   const [ aiInsightKey, setAiInsightKey ] = useState(0); // Used to force re-rendering of AI Insight tab when date range changes
+  const [subInfo, setSubInfo] = useState<SubscriptionInfo | null>(null);
+
+  useEffect(() => {
+    getUserSubscriptionInfo().then(setSubInfo);
+  }, []);
+
+  const premium = subInfo && isPremium(subInfo.tier, subInfo.status);
 
   // Derive a numeric months-like range string for child tabs that need it
   // We pass the actual Date objects to child tabs instead
@@ -98,9 +108,17 @@ export default function Reports() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <DateRangePicker value={dateRange} onChange={setDateRange} />
-          <Button variant="outline" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-2" /> Export
-          </Button>
+          {premium ? (
+            <Button variant="outline" onClick={handleExport}>
+              <Download className="h-4 w-4 mr-2" /> Export
+            </Button>
+          ) : (
+            <Link to="/finance/upgrade">
+              <Button variant="outline" className="relative overflow-hidden border-indigo-200 text-indigo-600 hover:bg-indigo-50 hover:text-indigo-700">
+                <Crown className="h-4 w-4 mr-2 text-indigo-400" /> Export
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
 
@@ -191,6 +209,28 @@ export default function Reports() {
       {tab === 'budgets'    && <BudgetsTab data={data} />}
       {tab === 'statements' && <FinancialStatementsTab data={data} />}
       {tab === 'ai' && <AiInsight key={aiInsightKey} refresh={() => setAiInsightKey(aiInsightKey + 1)} />}
+
+      {/* Premium upsell banner for free users */}
+      {!premium && tab !== 'ai' && (
+        <Link to="/finance/upgrade" className="block no-underline">
+          <div className="group cursor-pointer rounded-xl border border-indigo-200/60 bg-gradient-to-r from-indigo-50/80 via-purple-50/60 to-transparent p-4 transition-all duration-300 hover:border-indigo-300 hover:shadow-md hover:shadow-indigo-500/5">
+            <div className="flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500/10 to-purple-500/10">
+                  <Crown className="h-5 w-5 text-indigo-500" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-indigo-700">Upgrade to Premium</p>
+                  <p className="text-xs text-muted-foreground">Unlock AI insights, unlimited exports, and more</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1 text-sm font-medium text-indigo-600 opacity-0 transition-opacity group-hover:opacity-100">
+                View Plans <ArrowRight className="h-4 w-4" />
+              </div>
+            </div>
+          </div>
+        </Link>
+      )}
     </div>
   );
 }

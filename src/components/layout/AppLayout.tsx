@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router';
 import { auth, db } from '../../lib/firebase';
-import { LayoutDashboard, Wallet, CreditCard, RefreshCw, Layers, PieChart, LogOut, Settings, Menu, ExternalLink, BarChart2, TrendingUp } from 'lucide-react';
+import { LayoutDashboard, Wallet, CreditCard, RefreshCw, Layers, PieChart, LogOut, Settings, Menu, ExternalLink, BarChart2, TrendingUp, Crown } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '../ui/sheet';
 import { useSubscriptionsProcessor } from '../../hooks/useSubscriptionsProcessor';
@@ -24,6 +24,7 @@ export function AppLayout() {
       links: [
         { name: 'Dashboard', path: '/finance/dashboard', icon: LayoutDashboard },
         { name: 'Reports', path: '/finance/reports', icon: BarChart2 },
+        { name: 'Upgrade', path: '/finance/upgrade', icon: Crown },
       ]
     },
     {

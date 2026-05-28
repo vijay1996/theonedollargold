@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import { auth, db, serverUrl } from "@/src/lib/firebase";
 import { toast } from "sonner";
+import { Crown, Sparkles, ArrowRight } from "lucide-react";
+import { getUserSubscriptionInfo, isPremium } from "@/src/lib/razorpay";
+import type { SubscriptionInfo } from "@/src/lib/razorpay";
 
 type Report = {
     id: string;
@@ -53,6 +57,8 @@ export default function AiInsight({refresh}: { refresh: () => void }) {
     const [searchTerm, setSearchTerm]     = useState("");
     const [tries, setTries]               = useState<number>(0);
     const [generating, setGenerating]     = useState(false);
+    const [subInfo, setSubInfo]           = useState<SubscriptionInfo | null>(null);
+    const [checkingSub, setCheckingSub]   = useState(true);
 
     const fetchRetries = async () => {
         const data = await db.from('users').select('ai_report_tries').eq('uid', auth.currentUser?.uid)
@@ -60,7 +66,13 @@ export default function AiInsight({refresh}: { refresh: () => void }) {
             toast.error("Could not determine how many AI generations are left")
             return;
         }
-        setTries(data?.data[0]['ai_report_tries'] as number);
+        const t = data?.data[0]['ai_report_tries'] as number;
+        setTries(t);
+
+        // Also fetch subscription info
+        const info = await getUserSubscriptionInfo();
+        setSubInfo(info);
+        setCheckingSub(false);
     }
 
     const fetchReportList = async () => {
@@ -79,7 +91,7 @@ export default function AiInsight({refresh}: { refresh: () => void }) {
     const generateReport = async () => {
         setGenerating(true);
         try {
-            const res  = await fetch(serverUrl + "/api/generate-ai-insight", {
+            const res  = await fetch(serverUrl + "/api/reports/generate-ai-insight", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ uid: auth.currentUser?.uid, title: getReportTitle()  }),
@@ -117,6 +129,8 @@ export default function AiInsight({refresh}: { refresh: () => void }) {
         }
     }, [searchTerm, reportList])
 
+    const premium = subInfo && isPremium(subInfo.tier, subInfo.status);
+
     // ── render ─────────────────────────────────────────────────────────────
     return (
         <>
@@ -132,19 +146,71 @@ export default function AiInsight({refresh}: { refresh: () => void }) {
                         <p className="ai-subheading">AI-powered analysis of your financial health</p>
                     </div>
                     <div className="ai-header-actions">
-                        <div className="ai-tries-badge">
-                            <span style={{ color: tries <= 0 ? "#dc2626" : "#059669", fontWeight: 600 }}>{tries}</span>
-                            &nbsp;left
+                        <div className="ai-tries-badge" style={{
+                            background: premium ? 'linear-gradient(135deg, #eef2ff, #f5f3ff)' : '',
+                            borderColor: premium ? '#c7d2fe' : '',
+                        }}>
+                            {premium ? (
+                                <span style={{ color: "#6366f1", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
+                                    <Crown className="h-3.5 w-3.5" /> Unlimited
+                                </span>
+                            ) : (
+                                <>
+                                    <span style={{ color: tries <= 0 ? "#dc2626" : "#059669", fontWeight: 600 }}>{tries}</span>
+                                    &nbsp;left
+                                </>
+                            )}
                         </div>
-                        <button
-                            className="ai-btn-generate"
-                            onClick={generateReport}
-                            disabled={generating || (tries !== null && tries <= 0)}
-                        >
-                            {generating
-                                ? <><span className="ai-spinner" /> Generating…</>
-                                : "Generate Report"}
-                        </button>
+                        {premium ? (
+                            <button
+                                className="ai-btn-generate"
+                                onClick={generateReport}
+                                disabled={generating}
+                                style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)" }}
+                            >
+                                {generating
+                                    ? <><span className="ai-spinner" /> Generating…</>
+                                    : "Generate Report"}
+                            </button>
+                        ) : (
+                            <>
+                                <button
+                                    className="ai-btn-generate"
+                                    onClick={generateReport}
+                                    disabled={generating || tries <= 0}
+                                >
+                                    {generating
+                                        ? <><span className="ai-spinner" /> Generating…</>
+                                        : "Generate Report"}
+                                </button>
+                                {tries <= 0 && (
+                                    <Link to="/finance/upgrade" className="no-underline">
+                                        <button
+                                            className="ai-btn-upgrade"
+                                            style={{
+                                                display: "flex",
+                                                alignItems: "center",
+                                                gap: "0.4rem",
+                                                background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                                                color: "#fff",
+                                                border: "none",
+                                                borderRadius: "8px",
+                                                padding: "0.55rem 1.25rem",
+                                                fontSize: "0.875rem",
+                                                fontWeight: 500,
+                                                fontFamily: "inherit",
+                                                cursor: "pointer",
+                                                transition: "opacity 0.2s",
+                                            }}
+                                        >
+                                            <Sparkles className="h-4 w-4" />
+                                            Upgrade
+                                            <ArrowRight className="h-3.5 w-3.5" />
+                                        </button>
+                                    </Link>
+                                )}
+                            </>
+                        )}
                     </div>
                 </div>
 
