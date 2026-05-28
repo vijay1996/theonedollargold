@@ -22,6 +22,8 @@ import Assets from './pages/Assets';
 import Reports from './pages/reports/Reports';
 import Upgrade from './pages/Upgrade';
 import Health from './pages/Health';
+import Tickets from './pages/Tickets';
+import Goals from './pages/Goals';
 
 function ProtectedRoute({ user, loading }: { user: any; loading: boolean }) {
   if (loading) {
@@ -73,6 +75,8 @@ export default function App() {
               <Route path="reports" element={<Reports />} />
               <Route path="profile" element={<Profile />} />
               <Route path="upgrade" element={<Upgrade />} />
+              <Route path="tickets" element={<Tickets />} />
+              <Route path="goals" element={<Goals />} />
             </Route>
           </Route>
         </Routes>

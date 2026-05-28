@@ -1,10 +1,11 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { auth, db } from '../lib/firebase';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
 import { handleFirestoreError, OperationType } from '../lib/firestoreAuthError';
@@ -12,6 +13,7 @@ import { Trash2, Plus } from 'lucide-react';
 import LoadingOverlay from '../components/ui/loading-overlay';
 import { CreditCard } from './reports/useReportsData';
 import { primaryButtonClass } from '../lib/constants';
+import { getUserSubscriptionInfo, isPremium, SubscriptionInfo } from '../lib/razorpay';
 import PageHeader from '../components/layout/PageHeader';
 
 export default function CreditCards() {
@@ -20,6 +22,10 @@ export default function CreditCards() {
   const [name, setName] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [loading, setLoading] = useState(false);
+  const [subInfo, setSubInfo] = useState<SubscriptionInfo | null>(null);
+  const navigate = useNavigate();
+  const premium = subInfo && isPremium(subInfo.tier, subInfo.status);
+  const CARD_LIMIT = 5;
 
   useEffect(() => {
     let channel: any;
@@ -31,9 +37,13 @@ export default function CreditCards() {
         return;
       }
       try {
-        const { data, error } = await db.from('credit_cards').select('*').eq('uid', user.uid);
+        const [{ data, error }, info] = await Promise.all([
+          db.from('credit_cards').select('*').eq('uid', user.uid),
+          getUserSubscriptionInfo(),
+        ]);
         if (error) throw error;
         setCards(data || []);
+        setSubInfo(info);
           const chanTopic = `public:credit_cards_${user.uid}_${Date.now()}`;
           channel = db.channel(chanTopic).on('postgres_changes', { event: '*', schema: 'public', table: 'credit_cards', filter: `uid=eq.${user.uid}` }, () => {
             db.from('credit_cards').select('*').eq('uid', user.uid).then(r => { if (!r.error) setCards(r.data || []); });
@@ -97,9 +107,23 @@ export default function CreditCards() {
         <div className="flex w-full flex-col justify-between sm:flex-row sm:flex-wrap">
           <PageHeader title="Credit Cards" description="Manage your credit cards and due dates."/>
           <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger>
-              <Button className={`flex items-center ${primaryButtonClass}`}><Plus className="h-4 w-4 mr-2" /> Add Card</Button>
-            </DialogTrigger>
+            <div className="flex items-center gap-2">
+              <Button disabled={!premium && cards.length >= CARD_LIMIT}
+                onClick={() => {
+                if (!premium && cards.length >= CARD_LIMIT) {
+                  toast.error(`You've reached the free limit of ${CARD_LIMIT} credit cards. Upgrade to Premium for unlimited credit cards.`, {
+                    action: { label: 'Upgrade', onClick: () => navigate('/finance/upgrade') },
+                  });
+                  return;
+                }
+                setOpen(true);
+              }} className={`flex items-center ${primaryButtonClass}`}><Plus className="h-4 w-4 mr-2" /> Add Card</Button>
+              {!premium && (
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  {cards.length} / {CARD_LIMIT}
+                </span>
+              )}
+            </div>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Add Credit Card</DialogTitle>

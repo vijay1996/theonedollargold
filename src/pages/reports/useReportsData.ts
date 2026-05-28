@@ -16,7 +16,17 @@ export interface Category {
   id: string;
   uid: string;
   name: string;
-  type: 'income' | 'expense' | 'asset' | 'liability';
+  type: 'income' | 'expense' | 'asset' | 'liability' | 'goal';
+  created_at?: number;
+  updated_at?: number;
+}
+
+export interface Goal {
+  id: string;
+  uid: string;
+  category_id: string;
+  target_amount: number;
+  deadline?: number | null;
   created_at?: number;
   updated_at?: number;
 }
@@ -83,6 +93,7 @@ export interface ReportsData {
   subscriptions: Subscription[];
   creditCards: CreditCard[];
   disclosures: Disclosure[];
+  goals: Goal[];
   loading: boolean;
 }
 
@@ -93,6 +104,7 @@ export function useReportsData(): ReportsData {
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [creditCards, setCreditCards] = useState<CreditCard[]>([]);
   const [disclosures, setDisclosures] = useState<Disclosure[]>([]);
+  const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
@@ -108,13 +120,15 @@ export function useReportsData(): ReportsData {
           { data: subData },
           { data: ccData },
           { data: discData },
+          { data: goalData },
         ] = await Promise.all([
           db.from('categories').select('*').eq('uid', user.uid),
-          db.from('transactions').select('*').eq('uid', user.uid), // TODO: Add type assertion for data
-          db.from('budgets').select('*').eq('uid', user.uid), // TODO: Add type assertion for data
-          db.from('subscriptions').select('*').eq('uid', user.uid), // TODO: Add type assertion for data
+          db.from('transactions').select('*').eq('uid', user.uid),
+          db.from('budgets').select('*').eq('uid', user.uid),
+          db.from('subscriptions').select('*').eq('uid', user.uid),
           db.from('credit_cards').select('*').eq('uid', user.uid),
           db.from('disclosures').select('*').eq('uid', user.uid),
+          db.from('goals').select('*').eq('uid', user.uid),
         ]);
         setCategories((catData as Category[]) || []);
         setTransactions(((transData as Transaction[]) || []).map(t => ({ ...t, amount: Number(t.amount) })).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
@@ -122,6 +136,7 @@ export function useReportsData(): ReportsData {
         setSubscriptions((subData as Subscription[]) || []);
         setCreditCards((ccData as CreditCard[]) || []);
         setDisclosures(((discData as Disclosure[]) || []).map(d => ({ ...d, amount: Number(d.amount), current_value: d.current_value ? Number(d.current_value) : undefined })));
+        setGoals((goalData as Goal[]) || []);
       } catch (err) {
         handleFirestoreError(err, OperationType.LIST, 'reports');
       } finally {
@@ -131,5 +146,5 @@ export function useReportsData(): ReportsData {
     init();
   }, []);
 
-  return { transactions, categories, budgets, subscriptions, creditCards, disclosures, loading };
+  return { transactions, categories, budgets, subscriptions, creditCards, disclosures, goals, loading };
 }

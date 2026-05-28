@@ -223,12 +223,19 @@ export function getTierLabel(tier: SubscriptionTier): string {
   }
 }
 
+/** Cooldown period for free users: 1 per year (in ms) */
+export const AI_REPORT_FREE_COOLDOWN_MS = 365 * 24 * 60 * 60 * 1000;
+
+/** Cooldown period for premium users: 1 per week (in ms) */
+export const AI_REPORT_PREMIUM_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
+
 /**
- * Check if the user has AI reports remaining.
- * Premium users get unlimited (represented by -1).
- * Free users get 1/month as per the existing ai_report_tries system.
+ * Returns the timestamp (epoch ms) when the user can next generate a report, or null if they can generate now.
  */
-export function hasAiReportsRemaining(tier: SubscriptionTier, tries: number): boolean {
-  if (isPremium(tier, 'active')) return true; // premium = unlimited
-  return tries > 0;
+export function getNextAiReportTime(tier: SubscriptionTier, status: string | null, lastReportTimestamp: number | null): number | null {
+  if (!lastReportTimestamp) return null;
+  const cooldown = isPremium(tier, status) ? AI_REPORT_PREMIUM_COOLDOWN_MS : AI_REPORT_FREE_COOLDOWN_MS;
+  const nextTime = lastReportTimestamp + cooldown;
+  if (Date.now() >= nextTime) return null;
+  return nextTime;
 }

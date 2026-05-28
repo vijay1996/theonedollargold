@@ -1,5 +1,6 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { auth, db } from '../lib/firebase';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -14,20 +15,26 @@ import LoadingOverlay from '../components/ui/loading-overlay';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { Category } from './reports/useReportsData';
 import { primaryButtonClass, secondaryButtonClass } from '../lib/constants';
+import { getUserSubscriptionInfo, isPremium, SubscriptionInfo } from '../lib/razorpay';
 import PageHeader from '../components/layout/PageHeader';
 
 export default function Categories() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [name, setName] = useState('');
-  const [type, setType] = useState<'expense' | 'income' | 'asset' | 'liability'>('expense');
+  const [type, setType] = useState<'expense' | 'income' | 'asset' | 'liability' | 'goal'>('expense');
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'expense' | 'income' | 'asset' | 'liability'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'expense' | 'income' | 'asset' | 'liability' | 'goal'>('all');
   const [open, setOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkCategoryText, setBulkCategoryText] = useState('');
   const [sortBy, setSortBy] = useState('Name A-Z');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [subInfo, setSubInfo] = useState<SubscriptionInfo | null>(null);
+  const navigate = useNavigate();
+  const premium = subInfo && isPremium(subInfo.tier, subInfo.status);
+
+  const CATEGORY_LIMIT = 10;
 
   // Load categories and set up realtime listener
   useEffect(() => {
@@ -40,9 +47,13 @@ export default function Categories() {
         return;
       }
       try {
-        const { data, error } = await db.from('categories').select('*').eq('uid', user.uid);
+        const [{ data, error }, info] = await Promise.all([
+          db.from('categories').select('*').eq('uid', user.uid),
+          getUserSubscriptionInfo(),
+        ]);
         if (error) throw error;
         setCategories(data || []);
+        setSubInfo(info);
         const chanTopic = `public:categories_${user.uid}_${Date.now()}`;
         channel = db.channel(chanTopic)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'categories', filter: `uid=eq.${user.uid}` }, () => {
@@ -146,9 +157,26 @@ export default function Categories() {
           <SelectItem value="Name Z-A">Name Z-A</SelectItem>
         </SelectContent>
       </Select>
-      <Button onClick={() => { setOpen(true); setBulkCategoryText(''); }} className={`flex items-center ${primaryButtonClass}`}>
-        <Plus className="h-4 w-4 mr-2" /> Add
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button disabled={!premium && categories.length >= CATEGORY_LIMIT}
+                onClick={() => {
+                if (!premium && categories.length >= CATEGORY_LIMIT) {
+                  toast.error(`You've reached the free limit of ${CATEGORY_LIMIT} categories. Upgrade to Premium for unlimited categories.`, {
+                    action: { label: 'Upgrade', onClick: () => navigate('/finance/upgrade') },
+                  });
+                  return;
+                }
+                setOpen(true);
+                setBulkCategoryText('');
+              }} className={`flex items-center ${primaryButtonClass}`}>
+          <Plus className="h-4 w-4 mr-2" /> Add
+        </Button>
+        {!premium && (
+          <span className="text-xs text-muted-foreground whitespace-nowrap">
+            {categories.length} / {CATEGORY_LIMIT}
+          </span>
+        )}
+      </div>
     </div>
     </CardHeader>
 
@@ -209,6 +237,7 @@ export default function Categories() {
                     <SelectItem value="income">Income</SelectItem>
                     <SelectItem value="asset">Asset</SelectItem>
                     <SelectItem value="liability">Liability</SelectItem>
+                    <SelectItem value="goal">Goal</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

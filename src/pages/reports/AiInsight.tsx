@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { auth, db, serverUrl } from "@/src/lib/firebase";
 import { toast } from "sonner";
-import { Crown, Sparkles, ArrowRight } from "lucide-react";
-import { getUserSubscriptionInfo, isPremium } from "@/src/lib/razorpay";
+import { Crown, Sparkles, ArrowRight, Clock } from "lucide-react";
+import { getUserSubscriptionInfo, isPremium, getNextAiReportTime } from "@/src/lib/razorpay";
 import type { SubscriptionInfo } from "@/src/lib/razorpay";
 
 type Report = {
@@ -35,6 +35,35 @@ const formatDate = (ts: number) =>
         hour: "2-digit", minute: "2-digit",
     });
 
+const formatRelativeTime = (futureTs: number): string => {
+    const diffMs = futureTs - Date.now();
+    if (diffMs <= 0) return "Available now";
+
+    const diffMinutes = Math.floor(diffMs / 60000);
+    const diffHours   = Math.floor(diffMs / 3600000);
+    const diffDays    = Math.floor(diffMs / 86400000);
+
+    if (diffMinutes < 60) {
+        return `Next in ${diffMinutes} minute${diffMinutes === 1 ? '' : 's'}`;
+    }
+    if (diffHours < 24) {
+        return `Next in ${diffHours} hour${diffHours === 1 ? '' : 's'}`;
+    }
+    if (diffDays < 7) {
+        return `Next in ${diffDays} day${diffDays === 1 ? '' : 's'}`;
+    }
+    if (diffDays < 30) {
+        const weeks = Math.round(diffDays / 7);
+        return `Next in ${weeks} week${weeks === 1 ? '' : 's'}`;
+    }
+    if (diffDays < 365) {
+        const months = Math.round(diffDays / 30);
+        return `Next in ${months} month${months === 1 ? '' : 's'}`;
+    }
+    const years = Math.round(diffDays / 365);
+    return `Next in ${years} year${years === 1 ? '' : 's'}`;
+};
+
 const scoreColor = (s: number) => s >= 75 ? "#16a34a" : s >= 50 ? "#d97706" : "#dc2626";
 
 const SEVERITY_STYLES: Record<string, { bg: string; text: string; badge: string }> = {
@@ -51,55 +80,73 @@ const IMPACT_STYLES: Record<string, { bg: string; text: string; badge: string }>
 
 export default function AiInsight({refresh}: { refresh: () => void }) {
 
-    const [reportList, setReportList]     = useState<Report[]>([]);
-    const [filtered, setFiltered]         =useState<Report[]>([]);
+    const [reportList, setReportList]       = useState<Report[]>([]);
+    const [filtered, setFiltered]           = useState<Report[]>([]);
     const [currentReport, setCurrentReport] = useState<Report | null>(null);
-    const [searchTerm, setSearchTerm]     = useState("");
-    const [tries, setTries]               = useState<number>(0);
-    const [generating, setGenerating]     = useState(false);
-    const [subInfo, setSubInfo]           = useState<SubscriptionInfo | null>(null);
-    const [checkingSub, setCheckingSub]   = useState(true);
+    const [searchTerm, setSearchTerm]       = useState("");
+    const [generating, setGenerating]       = useState(false);
+    const [subInfo, setSubInfo]             = useState<SubscriptionInfo | null>(null);
+    const [nextAvailableTime, setNextAvailableTime] = useState<number | null>(null);
+    const [triesRemaining, setTriesRemaining] = useState<number>(1);
 
-    const fetchRetries = async () => {
-        const data = await db.from('users').select('ai_report_tries').eq('uid', auth.currentUser?.uid)
-        if (data.error || data.data === null) {
-            toast.error("Could not determine how many AI generations are left")
-            return;
-        }
-        const t = data?.data[0]['ai_report_tries'] as number;
-        setTries(t);
-
-        // Also fetch subscription info
-        const info = await getUserSubscriptionInfo();
-        setSubInfo(info);
-        setCheckingSub(false);
-    }
-
-    const fetchReportList = async () => {
+    const fetchData = async () => {
         const uid = auth.currentUser?.uid;
         if (!uid) return;
-        const data = await db.from("ai_insight").select("*").eq("uid", uid).order("created_at", { ascending: false });
-        if (data.error) {
-            toast.error("Could not load reports! Try again later")
-                return;
+
+        // Fetch reports, sub info, and ai_report_tries in parallel
+        const [reportRes, info, userRes] = await Promise.all([
+            db.from("ai_insight").select("*").eq("uid", uid).order("created_at", { ascending: false }),
+            getUserSubscriptionInfo(),
+            db.from('users').select('ai_report_tries').eq('uid', uid).single(),
+        ]);
+
+        if (reportRes.error) {
+            toast.error("Could not load reports! Try again later");
+            return;
         }
-        setReportList(data.data as Report[]);
-        await fetchRetries();
-    }
+
+        const reports = reportRes.data as Report[];
+        setReportList(reports);
+        setSubInfo(info);
+
+        // Track remaining tries (free users: 1, premium: -1 = unlimited)
+        const tries = userRes.data?.ai_report_tries ?? 1;
+        setTriesRemaining(tries < 0 ? Infinity : tries);
+
+        // Calculate next available generation time
+        const latestReport = reports.length > 0 ? reports[0] : null;
+        const nextTime = getNextAiReportTime(
+            info?.tier || 'free',
+            info?.status || null,
+            latestReport?.created_at || null,
+        );
+        setNextAvailableTime(nextTime);
+    };
 
     // ── generate ───────────────────────────────────────────────────────────
     const generateReport = async () => {
         setGenerating(true);
         try {
+            // Set ai_report_tries to 1 before requesting (server-side check requires it > 0).
+            // After generation succeeds, we'll set it to 0 for free users to enforce the limit.
+            await db.from('users').update({ ai_report_tries: 1 }).eq('uid', auth.currentUser?.uid);
+
             const res  = await fetch(serverUrl + "/api/reports/generate-ai-insight", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ uid: auth.currentUser?.uid, title: getReportTitle()  }),
+                body: JSON.stringify({ uid: auth.currentUser?.uid, title: getReportTitle() }),
             });
             const data = await res.json();
             if (!data.error) {
+                // For free users, decrement tries immediately after successful generation
+                if (!premium) {
+                    await db.from('users').update({ ai_report_tries: 0 }).eq('uid', auth.currentUser?.uid);
+                    setTriesRemaining(0);
+                }
                 toast.success("Report generated!");
                 refresh();
+                // Re-fetch to update cooldown
+                await fetchData();
             } else {
                 toast.error(data.error || "Could not generate report.");
             }
@@ -112,24 +159,27 @@ export default function AiInsight({refresh}: { refresh: () => void }) {
 
     // ── fetch ──────────────────────────────────────────────────────────────
     useEffect(() => {
-        fetchReportList();
+        fetchData();
     }, []);
 
     useEffect(() => {
         if (searchTerm.length) {
             setFiltered(
-                reportList.sort((a,b) => b.created_at - a.created_at).filter(r =>
+                [...reportList].sort((a,b) => b.created_at - a.created_at).filter(r =>
                     r.title?.toLowerCase().includes(searchTerm.toLowerCase())
                 )
             )
         } else {
             setFiltered(
-                reportList.sort((a,b) => b.created_at - a.created_at)
+                [...reportList].sort((a,b) => b.created_at - a.created_at)
             );
         }
-    }, [searchTerm, reportList])
+    }, [searchTerm, reportList]);
 
     const premium = subInfo && isPremium(subInfo.tier, subInfo.status);
+    const canGenerate = premium
+        ? !nextAvailableTime           // premium: time-based cooldown
+        : triesRemaining > 0 && !nextAvailableTime; // free: must have tries AND no cooldown
 
     // ── render ─────────────────────────────────────────────────────────────
     return (
@@ -146,44 +196,71 @@ export default function AiInsight({refresh}: { refresh: () => void }) {
                         <p className="ai-subheading">AI-powered analysis of your financial health</p>
                     </div>
                     <div className="ai-header-actions">
+                        {/* Cooldown Badge */}
                         <div className="ai-tries-badge" style={{
                             background: premium ? 'linear-gradient(135deg, #eef2ff, #f5f3ff)' : '',
                             borderColor: premium ? '#c7d2fe' : '',
                         }}>
                             {premium ? (
                                 <span style={{ color: "#6366f1", fontWeight: 600, display: "flex", alignItems: "center", gap: 4 }}>
-                                    <Crown className="h-3.5 w-3.5" /> Unlimited
+                                    <Crown className="h-3.5 w-3.5" /> 1 / week
                                 </span>
                             ) : (
-                                <>
-                                    <span style={{ color: tries <= 0 ? "#dc2626" : "#059669", fontWeight: 600 }}>{tries}</span>
-                                    &nbsp;left
-                                </>
+                                <span style={{ color: "#374151", fontWeight: 500, display: "flex", alignItems: "center", gap: 4 }}>
+                                    {triesRemaining > 0 ? '1 / year' : '0 / year'}
+                                </span>
+                            )}
+                            {nextAvailableTime && (
+                                <span style={{
+                                    display: "flex",
+                                    alignItems: "center",
+                                    gap: 3,
+                                    marginLeft: 6,
+                                    paddingLeft: 6,
+                                    borderLeft: "1px solid #e5e7eb",
+                                    fontSize: "0.75rem",
+                                    color: "#9ca3af",
+                                }}>
+                                    <Clock className="h-3 w-3" />
+                                    {formatRelativeTime(nextAvailableTime)}
+                                </span>
                             )}
                         </div>
+
+                        {/* Generate Button */}
                         {premium ? (
                             <button
                                 className="ai-btn-generate"
                                 onClick={generateReport}
-                                disabled={generating}
-                                style={{ background: "linear-gradient(135deg, #6366f1, #8b5cf6)" }}
+                                disabled={generating || !canGenerate}
+                                style={{
+                                    background: canGenerate
+                                        ? "linear-gradient(135deg, #6366f1, #8b5cf6)"
+                                        : undefined,
+                                    opacity: !canGenerate ? 0.5 : undefined,
+                                }}
                             >
                                 {generating
                                     ? <><span className="ai-spinner" /> Generating…</>
-                                    : "Generate Report"}
+                                    : canGenerate
+                                        ? "Generate Report"
+                                        : "On cooldown"}
                             </button>
                         ) : (
                             <>
                                 <button
                                     className="ai-btn-generate"
                                     onClick={generateReport}
-                                    disabled={generating || tries <= 0}
+                                    disabled={generating || !canGenerate}
+                                    style={{ opacity: !canGenerate ? 0.45 : undefined }}
                                 >
                                     {generating
                                         ? <><span className="ai-spinner" /> Generating…</>
-                                        : "Generate Report"}
+                                        : canGenerate
+                                            ? "Generate Report"
+                                            : triesRemaining <= 0 ? "Out of generations" : "On cooldown"}
                                 </button>
-                                {tries <= 0 && (
+                                {!canGenerate && (
                                     <Link to="/finance/upgrade" className="no-underline">
                                         <button
                                             className="ai-btn-upgrade"
@@ -204,7 +281,7 @@ export default function AiInsight({refresh}: { refresh: () => void }) {
                                             }}
                                         >
                                             <Sparkles className="h-4 w-4" />
-                                            Upgrade
+                                            Unlimited generations
                                             <ArrowRight className="h-3.5 w-3.5" />
                                         </button>
                                     </Link>
@@ -220,6 +297,47 @@ export default function AiInsight({refresh}: { refresh: () => void }) {
                     {/* sidebar — report list */}
                     <aside className="ai-sidebar">
                         <div className="ai-sidebar-inner">
+                            {/* Generations Remaining Section */}
+                            <div className="ai-sidebar-gens">
+                                <p className="ai-sidebar-label">Generations Remaining</p>
+                                <div className="ai-gens-display">
+                                    {premium ? (
+                                        <>
+                                            <span className="ai-gens-count" style={{ color: '#6366f1' }}>∞</span>
+                                            <span className="ai-gens-label">Unlimited</span>
+                                            {nextAvailableTime && (
+                                                <span className="ai-gens-cooldown">
+                                                    <Clock className="h-3 w-3" />
+                                                    {formatRelativeTime(nextAvailableTime)}
+                                                </span>
+                                            )}
+                                        </>
+                                    ) : triesRemaining > 0 ? (
+                                        <>
+                                            <span className="ai-gens-count" style={{ color: '#16a34a' }}>{triesRemaining}</span>
+                                            <span className="ai-gens-label">of 1 remaining</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span className="ai-gens-count" style={{ color: '#dc2626' }}>0</span>
+                                            <span className="ai-gens-label">of 1 remaining</span>
+                                            {nextAvailableTime ? (
+                                                <span className="ai-gens-cooldown">
+                                                    <Clock className="h-3 w-3" />
+                                                    Next in {formatRelativeTime(nextAvailableTime)}
+                                                </span>
+                                            ) : (
+                                                <span className="ai-gens-cooldown">
+                                                    New generation will be available after the cooldown period
+                                                </span>
+                                            )}
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="ai-sidebar-divider" />
+
                             <p className="ai-sidebar-label">Reports</p>
                             <input
                                 className="ai-search"
@@ -442,6 +560,46 @@ const css = `
     margin: 0;
     padding: 1rem 1rem 0.5rem;
 }
+
+/* generations remaining */
+.ai-sidebar-gens {
+    padding: 0 0.875rem 0.875rem;
+}
+.ai-gens-display {
+    background: #f9fafb;
+    border: 1px solid #f3f4f6;
+    border-radius: 8px;
+    padding: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.15rem;
+}
+.ai-gens-count {
+    font-family: 'DM Serif Display', serif;
+    font-size: 1.75rem;
+    line-height: 1.1;
+    font-weight: 400;
+}
+.ai-gens-label {
+    font-size: 0.725rem;
+    color: #6b7280;
+    font-weight: 500;
+}
+.ai-gens-cooldown {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 0.675rem;
+    color: #9ca3af;
+    margin-top: 0.2rem;
+}
+.ai-sidebar-divider {
+    height: 1px;
+    background: #f3f4f6;
+    margin: 0 0.875rem;
+}
+
 .ai-search {
     display: block;
     width: 100%;

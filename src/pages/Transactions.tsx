@@ -1,5 +1,6 @@
 import React from 'react';
 import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router';
 import { auth, db } from '../lib/firebase';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -29,6 +30,7 @@ interface BulkTransactionRow {
 }
 
 export default function Transactions() {
+  const navigate = useNavigate();
   const { formatCurrency, formatDate } = useLocalization();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -145,8 +147,13 @@ export default function Transactions() {
     }
   };
 
-  const filteredCategories = categories.filter(c => c.type === type);
-  const getCategoryName = (id: string) => categories.find(c => c.id === id)?.name || 'Unknown';
+  // For expense type, include goal categories too (goal transactions are recorded as expenses)
+  const filteredCategories = categories.filter(c => c.type === type || (type === 'expense' && c.type === 'goal'));
+  const getCategoryName = (id: string) => {
+    const cat = categories.find(c => c.id === id);
+    if (!cat) return 'Unknown';
+    return cat.type === 'goal' ? `🎯 ${cat.name}` : cat.name;
+  };
 
   return (
     <div className="space-y-6 relative">
@@ -296,9 +303,19 @@ export default function Transactions() {
                         <Select value={r.category_id} onValueChange={(val) => updateBulkRow(idx, 'category_id', val)}>
                           <SelectTrigger className="w-full"><SelectValue>{r.category_id ? getCategoryName(r.category_id) : 'Select'}</SelectValue></SelectTrigger>
                           <SelectContent>
-                            {categories.filter(c => c.type === r.type).map(c => (
-                              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                            ))}
+                            {(() => {
+                              const bulkCats = categories.filter(c => c.type === r.type || (r.type === 'expense' && c.type === 'goal'));
+                              return bulkCats.length === 0 ? (
+                                <div className="p-2 text-sm text-muted-foreground text-center">
+                                  No categories found.{' '}
+                                  <button type="button" className="text-indigo-600 hover:underline font-medium" onClick={() => navigate('/finance/categories')}>
+                                    Create one first
+                                  </button>
+                                </div>
+                              ) : bulkCats.map(c => (
+                                <SelectItem key={c.id} value={c.id}>{c.type === 'goal' ? `🎯 ${c.name}` : c.name}</SelectItem>
+                              ));
+                            })()}
                           </SelectContent>
                         </Select>
                       </div>
@@ -352,9 +369,19 @@ export default function Transactions() {
               <Select value={editCategoryId} onValueChange={v => setEditCategoryId(String(v))} required>
                 <SelectTrigger className="w-full"><SelectValue>{editCategoryId ? getCategoryName(editCategoryId) : undefined}</SelectValue></SelectTrigger>
                 <SelectContent>
-                  {categories.filter(c => c.type === editType).map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                  ))}
+                  {(() => {
+                    const editCats = categories.filter(c => c.type === editType);
+                    return editCats.length === 0 ? (
+                      <div className="p-2 text-sm text-muted-foreground text-center">
+                        No categories found.{' '}
+                        <button type="button" className="text-indigo-600 hover:underline font-medium" onClick={() => navigate('/finance/categories')}>
+                          Create one first
+                        </button>
+                      </div>
+                    ) : editCats.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                    ));
+                  })()}
                 </SelectContent>
               </Select>
             </div>
@@ -395,10 +422,21 @@ export default function Transactions() {
                 <Select value={categoryId} onValueChange={(val) => setCategoryId(String(val))} required>
                   <SelectTrigger className="w-full"><SelectValue placeholder="Select category">{categoryId ? getCategoryName(categoryId) : undefined}</SelectValue></SelectTrigger>
                   <SelectContent>
-                    {filteredCategories.map(c => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                    {filteredCategories.length === 0 && <div className="p-2 text-sm text-gray-500">No categories found. Create one first.</div>}
+                    {(() => {
+                      if (filteredCategories.length === 0) {
+                        return (
+                          <div className="p-2 text-sm text-muted-foreground text-center">
+                            No categories found.{' '}
+                            <button type="button" className="text-indigo-600 hover:underline font-medium" onClick={() => navigate('/finance/categories')}>
+                              Create one first
+                            </button>
+                          </div>
+                        );
+                      }
+                      return filteredCategories.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ));
+                    })()}
                   </SelectContent>
                 </Select>
               </div>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { auth, db } from '../lib/firebase';
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -18,6 +19,7 @@ import { primaryButtonClass } from '../lib/constants';
 import PageHeader from '../components/layout/PageHeader';
 
 export default function Assets() {
+  const navigate = useNavigate();
   const { formatCurrency } = useLocalization();
   const [items, setItems] = useState<Disclosure[]>([]);
   const [name, setName] = useState('');
@@ -290,10 +292,18 @@ const [bulkText, setBulkText] = useState('');
               <Select value={category} onValueChange={v => setCategory(v as string)}>
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="Select category">{category || 'Select category'}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {categories.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                </SelectContent>
+                </SelectTrigger>                  <SelectContent>
+                    {categories.length === 0 ? (
+                      <div className="p-2 text-sm text-muted-foreground text-center">
+                        No categories found.{' '}
+                        <button type="button" className="text-indigo-600 hover:underline font-medium" onClick={() => navigate('/finance/categories')}>
+                          Create one first
+                        </button>
+                      </div>
+                    ) : categories.map(c => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
               </Select>
             </div>
             <div className="sm:col-span-4 flex flex-col gap-1.5">

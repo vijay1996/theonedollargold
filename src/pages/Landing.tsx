@@ -166,7 +166,7 @@ export default function Landing() {
                 </Button>
               </Link>
               <Link to="/login" className="w-full sm:w-auto">
-                <Button variant="outline" size="lg" className="w-full sm:w-auto border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800 rounded-full px-6 sm:px-8 py-3 sm:py-6 text-sm sm:text-base">
+                <Button variant="outline" size="lg" className="w-full sm:w-auto border-slate-700 text-slate-300 hover:text-slate-800 bg-slate-800 hover:bg-slate-300 rounded-full px-6 sm:px-8 py-3 sm:py-6 text-sm sm:text-base">
                   Sign In to Dashboard
                 </Button>
               </Link>

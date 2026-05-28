@@ -1,11 +1,12 @@
 import React from 'react';
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router';
 import { auth, db } from '../lib/firebase';
 import { Card, CardHeader, CardTitle, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { v4 as uuidv4 } from 'uuid';
 import { toast } from 'sonner';
 import { handleFirestoreError, OperationType } from '../lib/firestoreAuthError';
@@ -14,6 +15,7 @@ import LoadingOverlay from '../components/ui/loading-overlay';
 import { useLocalization } from '../hooks/useLocalization';
 import { Subscription, Category } from './reports/useReportsData';
 import { primaryButtonClass } from '../lib/constants';
+import { getUserSubscriptionInfo, isPremium, SubscriptionInfo } from '../lib/razorpay';
 import PageHeader from '../components/layout/PageHeader';
 
 export default function Subscriptions() {
@@ -29,6 +31,10 @@ export default function Subscriptions() {
   const [deductionDate, setDeductionDate] = useState('');
   const [deductionMonth, setDeductionMonth] = useState('1');
   const [loading, setLoading] = useState(false);
+  const [subInfo, setSubInfo] = useState<SubscriptionInfo | null>(null);
+  const navigate = useNavigate();
+  const premium = subInfo && isPremium(subInfo.tier, subInfo.status);
+  const SUBSCRIPTION_LIMIT = 5;
 
   useEffect(() => {
     let channel: any;
@@ -40,14 +46,16 @@ export default function Subscriptions() {
         return;
       }
       try {
-        const [{ data: catData, error: catErr }, { data: subData, error: subErr }] = await Promise.all([
+        const [{ data: catData, error: catErr }, { data: subData, error: subErr }, info] = await Promise.all([
           db.from('categories').select('*').eq('uid', user.uid),
-          db.from('subscriptions').select('*').eq('uid', user.uid)
+          db.from('subscriptions').select('*').eq('uid', user.uid),
+          getUserSubscriptionInfo(),
         ]);
         if (catErr) throw catErr;
         if (subErr) throw subErr;
         setCategories(catData || []);
         setSubscriptions(subData || []);
+        setSubInfo(info);
 
         const chanTopic = `public:subscriptions_categories_${user.uid}_${Date.now()}`;
         channel = db.channel(chanTopic)
@@ -154,9 +162,23 @@ export default function Subscriptions() {
         <div className="flex w-full flex-col justify-between sm:flex-row sm:flex-wrap">
           <PageHeader title="Subscriptions" description="Manage your recurring payments."/>
           <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger>
-              <Button className={`flex items-center ${primaryButtonClass}`}><Plus className="h-4 w-4 mr-2" /> Add Subscription</Button>
-            </DialogTrigger>
+            <div className="flex items-center gap-2">
+              <Button disabled={!premium && subscriptions.length >= SUBSCRIPTION_LIMIT}
+                onClick={() => {
+                if (!premium && subscriptions.length >= SUBSCRIPTION_LIMIT) {
+                  toast.error(`You've reached the free limit of ${SUBSCRIPTION_LIMIT} subscriptions. Upgrade to Premium for unlimited subscriptions.`, {
+                    action: { label: 'Upgrade', onClick: () => navigate('/finance/upgrade') },
+                  });
+                  return;
+                }
+                setOpen(true);
+              }} className={`flex items-center ${primaryButtonClass}`}><Plus className="h-4 w-4 mr-2" /> Add Subscription</Button>
+              {!premium && (
+                <span className="text-xs text-muted-foreground whitespace-nowrap">
+                  {subscriptions.length} / {SUBSCRIPTION_LIMIT}
+                </span>
+              )}
+            </div>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Add Subscription</DialogTitle>
@@ -175,9 +197,19 @@ export default function Subscriptions() {
                   <Select value={categoryId} onValueChange={v => setCategoryId(String(v))} required>
                     <SelectTrigger><SelectValue placeholder="Select category">{categoryId ? getCategoryName(categoryId) : undefined}</SelectValue></SelectTrigger>
                     <SelectContent>
-                      {categories.filter(c => c.type === 'expense').map(c => (
-                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                      ))}
+                      {(() => {
+                        const expenseCats = categories.filter(c => c.type === 'expense');
+                        return expenseCats.length === 0 ? (
+                          <div className="p-2 text-sm text-muted-foreground text-center">
+                            No categories found.{' '}
+                            <button type="button" className="text-indigo-600 hover:underline font-medium" onClick={() => navigate('/finance/categories')}>
+                              Create one first
+                            </button>
+                          </div>
+                        ) : expenseCats.map(c => (
+                          <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                        ));
+                      })()}
                     </SelectContent>
                   </Select>
                 </div>

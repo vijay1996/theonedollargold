@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router';
-import { Download, TrendingUp, Wallet, PieChart, BarChart2, FileText, Binoculars, Crown, Sparkles, ArrowRight } from 'lucide-react';
+import { Download, TrendingUp, Wallet, PieChart, BarChart2, FileText, Binoculars, Crown, Sparkles, ArrowRight, Target } from 'lucide-react';
 import { DateRange } from 'react-day-picker';
 import { subMonths, startOfMonth, endOfMonth } from 'date-fns';
 import { Button } from '../../components/ui/button';
@@ -16,10 +16,12 @@ import { IncomeExpenseTab } from './IncomeExpenseTab';
 import { AssetsNetWorthTab } from './AssetsNetWorthTab';
 import { BudgetsTab } from './BudgetsTab';
 import { FinancialStatementsTab } from './FinancialStatementsTab';
+import { GoalsTab } from './GoalsTab';
 import AiInsight from './AiInsight';
 
 const TABS = [
   { id: 'income', label: 'Income & Expenses', icon: TrendingUp },
+  { id: 'goals', label: 'Goals', icon: Target },
   { id: 'assets', label: 'Assets & Net Worth', icon: Wallet },
   { id: 'budgets', label: 'Budgets & Categories', icon: PieChart },
   { id: 'statements', label: 'Financial Statements', icon: FileText },
@@ -205,6 +207,7 @@ export default function Reports() {
       )}
 
       {tab === 'income'     && <IncomeExpenseTab data={data} from={rangeFrom} to={rangeTo} />}
+      {tab === 'goals'      && <GoalsTab data={data} />}
       {tab === 'assets'     && <AssetsNetWorthTab data={data} from={rangeFrom} to={rangeTo} />}
       {tab === 'budgets'    && <BudgetsTab data={data} />}
       {tab === 'statements' && <FinancialStatementsTab data={data} />}
