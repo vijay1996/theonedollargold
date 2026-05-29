@@ -11,6 +11,17 @@ export function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [mobileExpanded, setMobileExpanded] = useState<Record<string, boolean>>({
+    overview: false,
+    cashflow: false,
+    wealth: false,
+    commitments: false,
+    support: false,
+  });
+
+  const toggleMobileSection = (section: string) => {
+    setMobileExpanded(prev => ({ ...prev, [section]: !prev[section] }));
+  };
 
   useSubscriptionsProcessor();
 
@@ -196,7 +207,7 @@ export function AppLayout() {
                 <SheetContent side="left" className="w-70 p-0 bg-slate-900 text-slate-300 border-r-slate-800 flex flex-col hide-close">
                   <SheetTitle className="sr-only">Menu</SheetTitle>
                   {/* Mobile Nav Header */}
-                  <div className="p-4 flex items-center gap-2 text-white font-semibold text-lg border-b border-slate-800">
+                  <div className="p-4 flex items-center gap-2 text-white font-semibold text-lg">
                     <Wallet className="h-6 w-6 text-indigo-400" />
                     <Link to="/" onClick={closeMobileNav}><span>TheOneDollarGold</span></Link>
                   </div>
@@ -231,36 +242,112 @@ export function AppLayout() {
                           <span className="font-semibold">Categories</span>
                         </button>
                       </div>
-                      <div className="border-t border-slate-800" />
-                      {navGroups.map((group) => (
-                        <div key={group.title}>
-                          <div className="px-4 mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                            {group.title}
-                          </div>
+                      {/* Overview dropdown */}
+                      <div className="px-4">
+                        <button
+                          onClick={() => toggleMobileSection('overview')}
+                          className="flex items-center justify-between w-full mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-300 transition-colors"
+                        >
+                          Overview
+                          <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${mobileExpanded.overview ? 'rotate-180' : ''}`} />
+                        </button>
+                        {mobileExpanded.overview && (
                           <div className="space-y-1">
-                            {group.links.map((link) => {
-                              const Icon = link.icon;
-                              return (
-                                <button
-                                  key={link.name}
-                                  onClick={() => { closeMobileNav(); navigate(link.path); }}
-                                  className={`flex items-center gap-3 w-full px-4 py-2.5 transition-colors text-left text-sm ${
-                                    isActive(link.path)
-                                      ? 'bg-indigo-500/10 text-indigo-400 border-r-2 border-indigo-500'
-                                      : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                                  }`}
-                                >
-                                  <Icon className="h-5 w-5 shrink-0" /> {link.name}
-                                </button>
-                              );
-                            })}
+                            <button
+                              onClick={() => { closeMobileNav(); navigate('/finance/dashboard'); }}
+                              className={`flex items-center gap-3 w-full px-4 py-2.5 transition-colors text-left text-sm ${
+                                isActive('/finance/dashboard')
+                                  ? 'bg-indigo-500/10 text-indigo-400 border-r-2 border-indigo-500'
+                                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                              }`}
+                            >
+                              <LayoutDashboard className="h-5 w-5 shrink-0" /> Dashboard
+                            </button>
+                            <button
+                              onClick={() => { closeMobileNav(); navigate('/finance/reports'); }}
+                              className={`flex items-center gap-3 w-full px-4 py-2.5 transition-colors text-left text-sm ${
+                                isActive('/finance/reports')
+                                  ? 'bg-indigo-500/10 text-indigo-400 border-r-2 border-indigo-500'
+                                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                              }`}
+                            >
+                              <BarChart2 className="h-5 w-5 shrink-0" /> Reports
+                            </button>
                           </div>
-                        </div>
-                      ))}
+                        )}
+                      </div>
+                      {/* Cash Flow dropdown */}
+                      <div className="px-4">
+                        <button
+                          onClick={() => toggleMobileSection('cashflow')}
+                          className="flex items-center justify-between w-full mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-300 transition-colors"
+                        >
+                          Cash Flow
+                          <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${mobileExpanded.cashflow ? 'rotate-180' : ''}`} />
+                        </button>
+                        {mobileExpanded.cashflow && (
+                          <div className="space-y-1">
+                            <button
+                              onClick={() => { closeMobileNav(); navigate('/finance/budgets'); }}
+                              className={`flex items-center gap-3 w-full px-4 py-2.5 transition-colors text-left text-sm ${
+                                isActive('/finance/budgets')
+                                  ? 'bg-indigo-500/10 text-indigo-400 border-r-2 border-indigo-500'
+                                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                              }`}
+                            >
+                              <PieChart className="h-5 w-5 shrink-0" /> Budgets
+                            </button>
+                            <button
+                              onClick={() => { closeMobileNav(); navigate('/finance/transactions'); }}
+                              className={`flex items-center gap-3 w-full px-4 py-2.5 transition-colors text-left text-sm ${
+                                isActive('/finance/transactions')
+                                  ? 'bg-indigo-500/10 text-indigo-400 border-r-2 border-indigo-500'
+                                  : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                              }`}
+                            >
+                              <RefreshCw className="h-5 w-5 shrink-0" /> Transactions
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      {navGroups.map((group) => {
+                        const sectionKey = group.title.toLowerCase();
+                        return (
+                          <div key={group.title} className="px-4">
+                            <button
+                              onClick={() => toggleMobileSection(sectionKey)}
+                              className="flex items-center justify-between w-full mb-2 text-xs font-semibold text-slate-500 uppercase tracking-wider hover:text-slate-300 transition-colors"
+                            >
+                              {group.title}
+                              <ChevronDown className={`h-3.5 w-3.5 transition-transform duration-200 ${mobileExpanded[sectionKey] ? 'rotate-180' : ''}`} />
+                            </button>
+                            {mobileExpanded[sectionKey] && (
+                              <div className="space-y-1">
+                                {group.links.map((link) => {
+                                  const Icon = link.icon;
+                                  return (
+                                    <button
+                                      key={link.name}
+                                      onClick={() => { closeMobileNav(); navigate(link.path); }}
+                                      className={`flex items-center gap-3 w-full px-4 py-2.5 transition-colors text-left text-sm ${
+                                        isActive(link.path)
+                                          ? 'bg-indigo-500/10 text-indigo-400 border-r-2 border-indigo-500'
+                                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                                      }`}
+                                    >
+                                      <Icon className="h-5 w-5 shrink-0" /> {link.name}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </nav>
                   {/* Mobile Footer: Profile & Logout */}
-                  <div className="p-2 border-t border-slate-800 space-y-1">
+                  <div className="p-2 space-y-1">
                     <button
                       onClick={() => { closeMobileNav(); navigate('/finance/profile'); }}
                       className={`flex items-center gap-3 w-full px-4 py-2.5 transition-colors font-medium text-sm text-left ${
