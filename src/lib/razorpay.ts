@@ -141,32 +141,48 @@ export async function cancelSubscription(): Promise<void> {
   if (data.error) throw new Error(data.error);
 }
 
+let subInfoPromise: Promise<SubscriptionInfo | null> | null = null;
+
 /**
  * Gets the subscription info for the current user from their profile.
+ * Concurrent calls within the same render cycle share a single in-flight promise.
+ * The cache is cleared after the promise resolves, so future navigations get fresh data.
  */
 export async function getUserSubscriptionInfo(): Promise<SubscriptionInfo | null> {
-  const user = auth.currentUser || await auth.getUser();
-  if (!user) return null;
+  // Return in-flight promise for concurrent callers (handles StrictMode double-mount)
+  if (subInfoPromise) return subInfoPromise;
 
-  const { data, error } = await db
-    .from('users')
-    .select('subscription_tier, subscription_status, subscription_end_date, razorpay_subscription_id')
-    .eq('uid', user.uid)
-    .single();
+  subInfoPromise = (async () => {
+    try {
+      const user = auth.currentUser || await auth.getUser();
+      if (!user) return null;
 
-  if (error) {
-    console.error('Failed to fetch subscription info', error);
-    return null;
-  }
+      const { data, error } = await db
+        .from('users')
+        .select('subscription_tier, subscription_status, subscription_end_date, razorpay_subscription_id')
+        .eq('uid', user.uid)
+        .single();
 
-  if (!data) return null;
+      if (error) {
+        console.error('Failed to fetch subscription info', error);
+        return null;
+      }
 
-  return {
-    tier: (data.subscription_tier as SubscriptionTier) || 'free',
-    status: data.subscription_status as string | null,
-    endDate: data.subscription_end_date as number | null,
-    razorpaySubscriptionId: data.razorpay_subscription_id as string | null,
-  };
+      if (!data) return null;
+
+      return {
+        tier: (data.subscription_tier as SubscriptionTier) || 'free',
+        status: data.subscription_status as string | null,
+        endDate: data.subscription_end_date as number | null,
+        razorpaySubscriptionId: data.razorpay_subscription_id as string | null,
+      };
+    } finally {
+      // Clear promise so future navigations / explicit refetches get fresh data
+      subInfoPromise = null;
+    }
+  })();
+
+  return subInfoPromise;
 }
 
 /**
@@ -190,16 +206,33 @@ export interface SubscriptionConfig {
   YEARLY_DISCOUNT_PERCENT: number;
 }
 
+// ── Caches ──────────────────────────────────────────────
+
+let cachedConfig: SubscriptionConfig | null = null;
+let configPromise: Promise<SubscriptionConfig> | null = null;
+
 /**
  * Fetches subscription pricing configuration from the server.
+ * Cached permanently after first successful fetch (config is static).
+ * Concurrent calls share the same in-flight promise to avoid duplicate requests.
  */
 export async function fetchSubscriptionConfig(): Promise<SubscriptionConfig> {
-  const res = await fetch(`${serverUrl}/api/premium/subscription-config`);
-  if (!res.ok) {
-    throw new Error(`Failed to fetch subscription config: ${res.statusText}`);
-  }
-  const data = await res.json();
-  return data as SubscriptionConfig;
+  if (cachedConfig) return cachedConfig;
+  if (configPromise) return configPromise;
+
+  configPromise = (async () => {
+    const res = await fetch(`${serverUrl}/api/premium/subscription-config`);
+    if (!res.ok) {
+      configPromise = null; // allow retry
+      throw new Error(`Failed to fetch subscription config: ${res.statusText}`);
+    }
+    const data = await res.json();
+    cachedConfig = data as SubscriptionConfig;
+    configPromise = null;
+    return cachedConfig;
+  })();
+
+  return configPromise;
 }
 
 /**

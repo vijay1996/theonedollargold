@@ -11,7 +11,21 @@ if (!url || !key) {
 
 export const supabase: SupabaseClient = createClient(url || '', key || '');
 
+// ── Caches ──────────────────────────────────────────────
+
+/** Tracks which user UIDs have been verified to exist in the users table */
+const ensuredUids = new Set<string>();
+
+/** In-flight or resolved promise for auth.getUser() – avoids duplicate /auth/v1/user calls */
+let getUserPromise: Promise<any> | null = null;
+
+/**
+ * Ensures a user profile row exists in the `users` table.
+ * Deduplicates by UID so we only query once per user per page visit.
+ */
 async function ensureUserProfile(u: any) {
+	if (ensuredUids.has(u.uid)) return;
+
 	const { data: existing, error: selectError } = await db
 		.from('users')
 		.select('uid')
@@ -19,7 +33,10 @@ async function ensureUserProfile(u: any) {
 		.maybeSingle();
 
 	if (selectError) throw selectError;
-	if (existing) return;
+	if (existing) {
+		ensuredUids.add(u.uid);
+		return;
+	}
 
 	const { error } = await db.from('users').insert([{
 		uid: u.uid,
@@ -32,6 +49,7 @@ async function ensureUserProfile(u: any) {
 		updated_at: Date.now()
 	}]);
 	if (error) throw error;
+	ensuredUids.add(u.uid);
 }
 
 interface AuthType {
@@ -46,28 +64,37 @@ interface AuthType {
 export const auth: any = {
 	currentUser: null,
 	async getUser() {
-		try {
-			const { data } = await supabase.auth.getUser();
-			this.currentUser = data?.user ? { ...data.user, uid: data.user.id } : null;
+		// Return cached in-flight promise to avoid duplicate /auth/v1/user calls
+		if (getUserPromise) return getUserPromise;
 
-			// Ensure a profile row exists for the authenticated user to satisfy FK constraints
-			if (this.currentUser) {
-				const u = this.currentUser;
-				try {
-					await ensureUserProfile(u);
+		getUserPromise = (async () => {
+			try {
+				const { data } = await supabase.auth.getUser();
+				this.currentUser = data?.user ? { ...data.user, uid: data.user.id } : null;
 
-				} catch (e) {
-					console.warn('Failed to upsert user profile:', e);
+				// Ensure a profile row exists for the authenticated user to satisfy FK constraints
+				if (this.currentUser) {
+					try {
+						await ensureUserProfile(this.currentUser);
+					} catch (e) {
+						console.warn('Failed to upsert user profile:', e);
+					}
 				}
+				return this.currentUser;
+			} catch (e) {
+				this.currentUser = null;
+				getUserPromise = null; // allow retry on transient errors
+				return null;
 			}
-			return this.currentUser;
-		} catch (e) {
-			this.currentUser = null;
-			return null;
-		}
+		})();
+
+		return getUserPromise;
 	},
 	onAuthStateChanged(cb: (user: any) => void) {
 		const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+			// Reset the getUser cache whenever auth state changes so subsequent calls get fresh data
+			getUserPromise = null;
+
 			const u = session?.user ? { ...session.user, uid: session.user.id } : null;
 			this.currentUser = u;
 			cb(u);
